@@ -1,0 +1,121 @@
+project:
+  data_root: "/path/to/your/LPM-data"          # <-- EDIT: folder holding the per-group input dirs
+  results_root: "/path/to/your/LPM-results"    # <-- EDIT: where the pipeline writes results
+
+dataset:
+  groups:
+    WT:
+      input_dir: "wildtype_posterior"
+      glob: "*.tif"
+    MUT:
+      input_dir: "aqp1a1_mutant_posterior"
+      glob: "*.tif"
+
+segmentation:
+  model: "2D_versatile_fluo"
+  time_axis: 0
+  prob_thresh: 0.4
+  nms_thresh: 0.2
+  labels_suffix: "_labels.tif"
+
+roi:
+  enable: true
+  early_frac: 0.3
+  min_spots: 20
+  x_expand_frac: 0.15
+  y_expand_frac: 0.2
+  y_pad_um: 10.0
+  x_pad_um: 0.0
+
+# ---------- Midline (TLS / PCA line fit) ----------
+midline_tls:
+  enable: true
+  band_half_width_um: 20.0
+
+  # two-stage fit (recommended)
+  fit_early_frac: 0.33
+  min_points: 60
+  preband_half_width_um: 60.0     # 建议 >= 2*band_half
+  x_center_mode_bins: 64
+  y_mid_q0: 0.20
+  y_mid_q1: 0.80
+
+  fit_y_bins: 25
+  fit_min_bin_points: 15
+  
+  # safety: constrain weird tilt
+  max_abs_tilt_deg: 45.0
+
+
+tracking:
+  px_um: 0.325
+  dt_min: 10.0
+
+  min_area_um2: 20.0
+  max_area_um2: 60.0
+  fragment_area_um2: 10.0
+
+  search_range_um: 8.5
+  memory: 2
+  min_track_len: 3
+
+  adaptive_stop_um: 5.0
+  adaptive_step: 0.95
+
+  max_spots_per_frame: 150
+  min_separation_um: 3.0
+
+# Gap closing (if you use it in your pipeline; safe to keep)
+gap_closing:
+  enable: true
+  max_gap_frames: 3
+  max_disp_um: 10.0
+  w_dist: 1.0
+  w_area: 2.0
+  w_align: 4.0
+  w_ecc: 0.5
+  cost_max: 18.0
+
+# ---------- Burst detection (aligned names) ----------
+burst_detection:
+  enable: true
+
+  # Two-mode burst detection switches (names aligned across scripts)
+  detect_track_break: true
+  detect_within_track: true
+
+  lookahead_frames: 2
+  search_radius_um: 8.0
+
+  # "big nucleus" threshold (candidate must have area_prev >= this)
+  big_area_um2: 30.0
+
+  # drop: area_now < area_prev * area_drop_ratio
+  area_drop_ratio: 0.60
+
+  # fragments: fragment area <= area_prev * frag_area_ratio_max
+  # must be < 0.5 to avoid division; use 0.30 by default
+  frag_area_ratio_max: 0.30
+
+  min_frags: 2
+  max_frags: 8
+
+# ---------- Compare ----------
+compare:
+  enable: true
+  start_hpf: 13.0
+  end_hpf: 17.0
+  dt_min: 10.0
+  speed_skip_first_frame: true
+
+  # width metric from x-quantiles
+  width_q_low: 0.10
+  width_q_high: 0.90
+
+  # enforce WT-left MUT-right in boxplots
+  group_order: ["WT", "MUT"]
+
+  preburst_n_pre_frames: 3        # dt = -3,-2,-1
+  preburst_agg: "mean"            # "mean" or "median"
+  preburst_show_individual_movies: true
+

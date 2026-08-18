@@ -1,0 +1,21 @@
+# Machine-specific data paths — never commit (copy paths_local.example.py)
+paths_local.py
+
+# Output directories (data, plots) — never commit
+_py_out*/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Notebooks
+.ipynb_checkpoints/
+
+# IDE settings
+.vscode/
+.idea/
+
+# OS junk
+.DS_Store
+Thumbs.db
+

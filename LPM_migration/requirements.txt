@@ -1,0 +1,14 @@
+# Python 3.9+ recommended.
+# NOTE: StarDist/csbdeep require TensorFlow; install a TF build that matches your
+# platform and (optionally) GPU/CUDA setup before installing this file.
+numpy
+pandas
+scipy
+matplotlib
+PyYAML
+tifffile
+imageio
+scikit-image
+trackpy
+stardist
+csbdeep

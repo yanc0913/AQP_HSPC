@@ -1,0 +1,8 @@
+# Python 3.11+ recommended.
+# Versions pinned to the environment the pipeline was developed and validated on.
+numpy==2.2.5
+pandas==2.3.3
+scipy==1.15.3
+matplotlib==3.10.7
+statsmodels==0.14.6
+openpyxl==3.1.5
