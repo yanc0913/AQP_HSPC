@@ -43,4 +43,5 @@ DATASET_ROOTS = {
 MAIN_FIG_DIRS = {
     "Yoda_GsMTx":    DATA_BASE / "_MainFigures" / "Yoda_GsMTx",
     "ISO_MIC_Piezo": DATA_BASE / "_MainFigures" / "ISO_MIC_Piezo",
+    "Q1_ratio":      DATA_BASE / "_MainFigures" / "Q1_vDA_dDA_ratio",
 }

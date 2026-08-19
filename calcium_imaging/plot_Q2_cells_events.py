@@ -556,28 +556,34 @@ def apply_dense_yticks(ax, nbins=None):
         MaxNLocator(nbins=n, steps=[1, 2, 2.5, 5, 10]))
 
 
-def draw_prism_box(ax, data_list, xpos, fill_colors):
+def draw_prism_box(ax, data_list, xpos, fill_colors, width=None, jitter=None,
+                   dot_size=None, lw_scale=1.0):
     """Shared Prism-style box drawing: 10-90 whisker boxes + jittered embryo dots.
 
     Matches the original single-genotype rendering exactly (same widths, whiskers,
-    alpha, jitter seed) so existing figures are unchanged."""
-    bp = ax.boxplot(data_list, positions=xpos, widths=STYLE["box"]["width"],
+    alpha, jitter seed) so existing figures are unchanged. The optional geometry
+    overrides exist for figures drawn at a larger physical size (the main-figure
+    row layout), where the small per-dataset box width reads as a thin sliver."""
+    bw = float(STYLE["box"]["width"] if width is None else width)
+    jw = float(0.18 if jitter is None else jitter)
+    ds = float(STYLE["box"]["dot_size"] if dot_size is None else dot_size)
+    bp = ax.boxplot(data_list, positions=xpos, widths=bw,
                     showfliers=False, whis=(10, 90), patch_artist=True)
     for patch, c in zip(bp["boxes"], fill_colors):
         patch.set_facecolor(c)
         patch.set_alpha(STYLE["box"]["box_alpha"])
         patch.set_edgecolor("black")
-        patch.set_linewidth(STYLE["box"]["box_edge_lw"])
+        patch.set_linewidth(STYLE["box"]["box_edge_lw"] * lw_scale)
     for med in bp["medians"]:
         med.set_color("black")
-        med.set_linewidth(STYLE["box"]["median_lw"])
+        med.set_linewidth(STYLE["box"]["median_lw"] * lw_scale)
     rng = np.random.default_rng(0)
     for x, y, c in zip(xpos, data_list, fill_colors):
         if len(y) == 0:
             continue
-        jitter = (rng.random(len(y)) - 0.5) * 0.18
-        ax.scatter(x + jitter, y, s=STYLE["box"]["dot_size"],
-                   facecolor=c, edgecolor="black", linewidth=0.5, zorder=3,
+        jit = (rng.random(len(y)) - 0.5) * jw
+        ax.scatter(x + jit, y, s=ds,
+                   facecolor=c, edgecolor="black", linewidth=0.5 * lw_scale, zorder=3,
                    alpha=STYLE["box"].get("dot_alpha", 1.0))
     return bp
 
