@@ -596,7 +596,7 @@ def pub_label(cond: str) -> str:
 
 # Target number of y-axis major ticks on box plots (denser = smaller steps).
 # Passed to matplotlib's MaxNLocator; the locator still snaps to "nice" values.
-BOX_YTICK_NBINS = 12
+BOX_YTICK_NBINS = 18
 
 
 def boxplot_ylim_for(pair_id: str):

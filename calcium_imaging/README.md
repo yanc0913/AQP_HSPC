@@ -4,9 +4,8 @@ Python pipeline for analysing zebrafish GCaMP/Lifeact calcium-imaging data:
 it turns Fiji-exported ROI time-series into analysis tables, QC reports, and
 publication figures.
 
-This code supports the calcium-imaging analysis in Kondrychyn *et al.*,
+This code produces the calcium-imaging analysis and figures in Kondrychyn *et al.*,
 *"Cellular hydraulics ensures robust endothelial-to-haematopoietic transition"*.
-Calcium analysis is a **supporting** component of that study, not its main claim.
 
 > **Note.** This repository contains code only. The raw imaging data and all
 > analysis outputs are not included. Point the pipeline at your own data by

@@ -16,9 +16,17 @@ clean one; WT is an extra reference from a separate experiment (dotted line
 marks the experiment boundary).
 
 Same conventions as plot_main_foldchange.py: 2x2 grid (flat/round x
-amplitude/events), box + embryo dots, reference at 0, events use a per-metric
-pseudocount (log2(0) guard), drug-vs-vehicle Welch p above each box. All
-between-group comparisons go to the CSV.
+amplitude/events), box + embryo dots, reference at 0.
+
+The p above each bar is NOT recomputed here. It is read back from the source
+experiment's built stats workbook, so the bar prints the value produced by the
+method that design actually warrants, and matches the per-dataset figure for
+the same comparison exactly:
+  * WT              -> Welch + Holm within the E3 control family (ISO and BDM
+                       are both tested against E3 in that experiment)
+  * MIC / Piezo     -> Tukey HSD from the genotype x drug two-way ANOVA
+The method used for every bar is recorded in the `p_test` column. All
+between-group comparisons go to the workbook.
 
 Outputs to OUT_DIR:
   * combined 2x2:  main_iso_foldchange_2x2.{png,svg}
@@ -149,8 +157,57 @@ def _vals(df, geno, cond, cclass, col):
     return a[np.isfinite(a)]
 
 
+_STATS = Path("_py_out_%smin" % WSUF) / "tables" / "Q2_stats_pvalues.xlsx"
+_STATS_CACHE = {}
+
+
+def _load_pairwise(dkey: str):
+    """Cached `pairwise` sheet of a dataset's built stats workbook."""
+    if dkey not in _STATS_CACHE:
+        path = DATASET_ROOTS[dkey] / _STATS
+        try:
+            _STATS_CACHE[dkey] = pd.read_excel(path, sheet_name="pairwise")
+        except Exception as e:
+            print(f"[WARN] cannot read {path}: {e!r}")
+            _STATS_CACHE[dkey] = pd.DataFrame()
+    return _STATS_CACHE[dkey]
+
+
+def source_p(dkey, geno, drug, veh, cclass, mkey):
+    """The drug-vs-vehicle p AS COMPUTED BY THE SOURCE EXPERIMENT.
+
+    Each bar is a comparison that the per-dataset pipeline already tests with
+    the design-appropriate method, so we read that value back instead of
+    recomputing a bare Welch here:
+
+      * MIC / Piezo come from the genotype x drug 2x2 -> Tukey HSD
+        (labels look like "MIC|E3" vs "MIC|ISO").
+      * WT comes from the single-genotype E3/ISO/BDM experiment, where ISO and
+        BDM share the E3 control -> Welch with Holm within that control family
+        (labels are the bare condition names).
+
+    Reading it back guarantees the main figure prints the same number as the
+    per-dataset figure for the same comparison. Returns (p, test_name); falls
+    back to a raw Welch computed by the caller if no record is found.
+    """
+    df = _load_pairwise(dkey)
+    if df.empty:
+        return float("nan"), ""
+    sub = df[(df["cell_class"].astype(str) == str(cclass)) &
+             (df["metric"].astype(str) == str(mkey))]
+    if sub.empty:
+        return float("nan"), ""
+    for a, b in ((f"{geno}|{veh}", f"{geno}|{drug}"), (str(veh), str(drug))):
+        m = sub[((sub["group1"].astype(str) == a) & (sub["group2"].astype(str) == b)) |
+                ((sub["group1"].astype(str) == b) & (sub["group2"].astype(str) == a))]
+        m = m[~m["test"].astype(str).str.startswith("foldchange")]
+        if len(m):
+            return float(m["p_value"].iloc[0]), str(m["test"].iloc[0])
+    return float("nan"), ""
+
+
 def build_panel(data, cclass, mcol, eps, mode="log2",
-                x_step=1.0, x_gap=0.4):
+                x_step=1.0, x_gap=0.4, mkey=None):
     """Return dict with box_data, colours, xpos, labels, vs_p, seps + fc_rows.
 
     mode = "log2": each embryo -> log2( value / mean(own-E3) ).  (amplitude)
@@ -175,17 +232,22 @@ def build_panel(data, cclass, mcol, eps, mode="log2",
             fold = (dv + eps) / (vmean + eps)
             val = np.log2(fold) if LOG2 else fold
         val = val[np.isfinite(val)]
-        try:
-            p = float(ttest_ind(dv, vv, equal_var=False, nan_policy="omit").pvalue)
-        except Exception:
-            p = float("nan")
+        p, p_test = source_p(dkey, geno, drug, veh, cclass, mkey)
+        if not np.isfinite(p):
+            # no record in the source workbook -> fall back to a raw Welch here
+            try:
+                p = float(ttest_ind(dv, vv, equal_var=False,
+                                    nan_policy="omit").pvalue)
+            except Exception:
+                p = float("nan")
+            p_test = "welch_none_fallback"
         box_data.append(val); colors.append(col); xpos.append(x)
         labels.append(label); vs_p.append(p)
         fc.append(dict(cell_class=cclass, metric=mcol, group=label,
                        genotype=geno, dataset=dkey, drug=drug, vehicle=veh,
                        n_drug=int(len(dv)), vehicle_mean=vmean,
                        median=float(np.median(val)), mean=float(np.mean(val)),
-                       p_iso_vs_e3=p, transform=mode,
+                       p_iso_vs_e3=p, p_test=p_test, transform=mode,
                        log2=bool(LOG2 and mode == "log2"),
                        pseudocount=(eps if mode == "log2" else 0.0),
                        _fold=val))   # _fold (=diff for events) for between-group tests
@@ -284,7 +346,8 @@ def main():
         for mlab, mkey, mcol, _ in METRICS:
             panels[(clab, mlab)] = build_panel(data, cclass, mcol,
                                                eps_by_metric[mkey],
-                                               mode=FC_MODE.get(mkey, "log2"))
+                                               mode=FC_MODE.get(mkey, "log2"),
+                                               mkey=mkey)
     col_ylim = {}
     for mlab, mkey, mcol, _ in METRICS:
         allv = np.concatenate([v for clab, _ in CELLCLASSES
@@ -331,7 +394,7 @@ def main():
             row_panels[(clab, mlab)] = build_panel(
                 data, cclass, mcol, eps_by_metric[mkey],
                 mode=FC_MODE.get(mkey, "log2"),
-                x_step=ROW_X_STEP, x_gap=ROW_X_GAP)
+                x_step=ROW_X_STEP, x_gap=ROW_X_GAP, mkey=mkey)
 
     row_ylim = {}
     for mlab, mkey, mcol, _ in METRICS:

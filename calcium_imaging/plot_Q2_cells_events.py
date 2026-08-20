@@ -274,6 +274,9 @@ def add_pvals(ax, data_list: list[np.ndarray], x_positions: Sequence[float],
     """
     planned = cfg.STATS.get("planned_pairs") or []
     planned_set = {frozenset((str(a), str(b))) for a, b in planned}
+    # vehicle (first element) per planned pair -> lets us group comparisons that
+    # share a control into one multiple-comparison family.
+    planned_vehicle = {frozenset((str(a), str(b))): str(a) for a, b in planned}
     use_planned = bool(planned_set) and labels is not None
     if use_planned:
         _label_set = {str(x) for x in labels}
@@ -315,11 +318,11 @@ def add_pvals(ax, data_list: list[np.ndarray], x_positions: Sequence[float],
         return result
 
     # Pairwise Welch. In planned mode, keep only the requested pairs.
-    pairs, pvals = [], []
+    pairs, pvals, fams = [], [], []
     for i in range(len(data_list)):
         for j in range(i + 1, len(data_list)):
-            if use_planned and frozenset(
-                (str(labels[i]), str(labels[j]))) not in planned_set:
+            _key = frozenset((str(labels[i]), str(labels[j]))) if labels is not None else None
+            if use_planned and _key not in planned_set:
                 continue
             a, b = data_list[i], data_list[j]
             if a is None or b is None or len(a) < 2 or len(b) < 2:
@@ -327,6 +330,7 @@ def add_pvals(ax, data_list: list[np.ndarray], x_positions: Sequence[float],
             p = ttest_ind(a, b, equal_var=False, nan_policy="omit").pvalue
             pairs.append((i, j))
             pvals.append(p)
+            fams.append(planned_vehicle.get(_key, "") if use_planned else "")
 
     if not pvals:
         # No pairwise to draw; just place the omnibus and return
@@ -336,8 +340,31 @@ def add_pvals(ax, data_list: list[np.ndarray], x_positions: Sequence[float],
                     fontsize=cfg.STATS.get("pval_fontsize", cfg.FONT["legend"]))
         return result
 
-    # Raw p in planned mode; Holm-corrected otherwise.
-    p_corr = np.asarray(pvals, float) if use_planned else holm(np.asarray(pvals, float))
+    # Multiple-comparison handling.
+    #
+    # Default (fallback) mode: all-pairwise, one family -> Holm across everything.
+    #
+    # Planned mode: correct WITHIN each control family. Two drugs tested against
+    # the SAME vehicle (E3 vs ISO and E3 vs BDM) are one family and get Holm;
+    # comparisons against DIFFERENT vehicles (DMSO vs Yoda, E3 vs GsMTx) are
+    # separate a-priori questions, and a family of one is unchanged by Holm.
+    # The figure always prints the value produced by whichever rule applied.
+    if use_planned:
+        p_corr = np.asarray(pvals, float).copy()
+        _by_fam = {}
+        for _idx, _f in enumerate(fams):
+            _by_fam.setdefault(_f, []).append(_idx)
+        _any_multi = False
+        for _f, _idxs in _by_fam.items():
+            if len(_idxs) > 1:
+                _any_multi = True
+            _sub = holm(np.asarray([pvals[i] for i in _idxs], float))
+            for _k, _i in enumerate(_idxs):
+                p_corr[_i] = _sub[_k]
+        result["correction"] = "holm_within_control" if _any_multi else "none"
+    else:
+        p_corr = holm(np.asarray(pvals, float))
+        result["correction"] = "holm"
 
     # Find the data ceiling: highest finite value across all groups
     all_vals = []
@@ -652,6 +679,7 @@ def plot_foldchange_for_pid(dfp, pid, box_metrics, fc_pairs, use_log2, pub,
         panels = {}   # cell_class -> (fig, ax)
         for cell_class in ["flat", "round"]:
             fold_data, labels, colors, vs_veh_p = [], [], [], []
+            vs_veh_fam, vs_veh_rows = [], []
             for veh, drug in fc_pairs:
                 dv = pd.to_numeric(dfp[(dfp["condition"].astype(str) == str(drug)) &
                     (dfp[cell_class_col].astype(str) == cell_class)][col],
@@ -680,14 +708,38 @@ def plot_foldchange_for_pid(dfp, pid, box_metrics, fc_pairs, use_log2, pub,
                 labels.append(cfg.pub_label(drug))
                 colors.append(cfg.color_for(drug))
                 vs_veh_p.append(p_vs)
-                fc_rows.append(dict(
+                vs_veh_fam.append(str(veh))
+                _row = dict(
                     pair_id=pid, cell_class=cell_class, metric=metric["key"],
                     drug=str(drug), vehicle=str(veh), n_drug_embryos=int(len(dv)),
                     vehicle_mean=vmean, fold_mean=float(np.mean(fold)),
                     fold_median=float(np.median(fold)),
                     fold_sd=(float(np.std(fold, ddof=1)) if len(fold) > 1
                              else float("nan")),
-                    p_vs_vehicle_welch=p_vs, log2=bool(use_log2)))
+                    p_vs_vehicle_welch=p_vs, log2=bool(use_log2))
+                fc_rows.append(_row)
+                vs_veh_rows.append(_row)
+
+            # Correct the drug-vs-vehicle p WITHIN each control family, matching
+            # the boxplot brackets: drugs sharing one vehicle (E3 vs ISO and
+            # E3 vs BDM) are one family and get Holm; drugs against different
+            # vehicles stay independent (a family of one is unchanged by Holm).
+            # The panel must print the value the applied rule produced.
+            if vs_veh_p:
+                _by_fam = {}
+                for _i, _f in enumerate(vs_veh_fam):
+                    _by_fam.setdefault(_f, []).append(_i)
+                _multi = False
+                for _f, _idxs in _by_fam.items():
+                    if len(_idxs) > 1:
+                        _multi = True
+                    _sub = holm(np.asarray([vs_veh_p[i] for i in _idxs], float))
+                    for _k, _i in enumerate(_idxs):
+                        vs_veh_p[_i] = float(_sub[_k])
+                for _i, _r in enumerate(vs_veh_rows):
+                    _r["p_vs_vehicle_welch"] = vs_veh_p[_i]
+                    _r["p_correction"] = ("holm_within_control" if _multi
+                                          else "none")
             if not fold_data:
                 continue
             fig, ax = plt.subplots(figsize=cfg.FIG_SIZE["box"])
