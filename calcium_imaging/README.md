@@ -22,9 +22,13 @@ calcium_build_tables.py   raw CSVs ──► analysis tables
 plot_Q1 / plot_Q2 / plot_Q3   tables ──► figures (PNG + SVG) and stats
 ```
 
-ROIs are extracted upstream in Fiji using the included ImageJ macro
-(`Calcium_ROI_selection_v4.ijm`, SIFT registration with interpolation). Drug /
-condition and genotype are parsed from **filenames**, not folders.
+Upstream of this repository, each movie is processed in Fiji in two separate
+steps: first the time-series is registered (SIFT / linear stack alignment with
+interpolation), which is where the `Aligned_` filename prefix comes from; then
+ROIs are drawn and measured with the included macro
+`Calcium_ROI_selection_v4.ijm`. The macro performs ROI selection and
+measurement export only - it does no registration. Drug / condition and
+genotype are parsed from **filenames**, not folders.
 
 ## Setup
 

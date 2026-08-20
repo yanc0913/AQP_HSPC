@@ -19,9 +19,19 @@ Processing overview
    vDA band. Convention: ``M = median(pre) / median(post)``; applied as
    ``GCaMP_post_corrected = GCaMP_post × M``.
 4. vDA/dDA ratio (E3 control only).
-5. ΔF/F₀ normalisation: ``trace = signal_corrected / median(signal_corrected_pre)``.
-   Because GCaMP values are background-subtracted upstream, F itself represents
-   "ΔF relative to background"; we report F/F₀ (pre-median normalised to ~1).
+5. F/F₀ normalisation: ``trace = signal_corrected / median(signal_corrected_pre)``.
+   A plain ratio -- nothing is subtracted -- so the pre phase sits at ~1 by
+   construction and post is the multiplicative deviation from it.
+   Because GCaMP values are background-subtracted upstream, F already
+   represents fluorescence above background.
+
+   Do NOT "fix" this to ΔF/F₀ (= F/F₀ - 1). The two differ by a constant, so
+   every difference-based test (Welch, ANOVA, Tukey) is numerically identical,
+   but the main figure divides amplitude by its vehicle mean. Under F/F₀ those
+   vehicle baselines are 0.72-1.20, safely away from zero; under ΔF/F₀ they
+   would be -0.28 to +0.20, and 5 of the 8 amplitude panels would have a
+   vehicle baseline <= 0 -- a sign-flipped or NaN fold change. F/F₀ is
+   load-bearing for the ratio, not just a labelling preference.
 6. Peak detection (single-frame, robust-z + local/prominence gate). Detection
    is run only on the first ``cfg.post_analysis_min()`` minutes of post phase
    so the median/MAD threshold is computed on a "clean" window.

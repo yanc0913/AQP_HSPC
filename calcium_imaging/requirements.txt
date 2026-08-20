@@ -1,4 +1,5 @@
-# Python 3.11+ recommended.
+# Tested on Python 3.10.19 (conda). Nothing here requires 3.11+;
+# 3.10 or newer should work.
 # Versions pinned to the environment the pipeline was developed and validated on.
 numpy==2.2.5
 pandas==2.3.3

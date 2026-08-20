@@ -47,14 +47,23 @@ ImageJ raw fluorescence  →  background subtracted (mean_bgsub, max_bgsub)
                                                   cell_trace_main  (F/F₀)
 ```
 
-### 2.1 Why max_bgsub for cells, mean_bgsub for bands?
+### 2.1 Which pixel statistic drives cells and bands?
 
-- **Cells** are small ROIs where a transient localised peak is the signal
-  of interest. `max_bgsub` is more sensitive to single-pixel-area events.
-- **Bands** (vDA, dDA) are larger ROIs where we care about the average
-  fluorescence level across the band. `mean_bgsub` is appropriate.
+**Current decision: `mean_bgsub` for BOTH cells and bands**
+(`cfg.CELL_SIGNAL_STAT = "mean"`, the paper main figure). `max_bgsub` is still
+computed and kept in the tables, but only as an internal sanity check.
 
-This is an intentional asymmetry; the README explicitly notes it.
+The full rationale lives with the switch itself, in `calcium_config.py` §4 -
+in short, `max` is dominated by single-frame artefacts on ROIs that touch
+vasculature (flowing bright vesicles, subpixel registration jitter), which
+inflated event counts several-fold; `mean` gives the same direction of effect
+with comparable significance and is robust to ROI-area drift between phases.
+
+> **Superseded.** This section previously argued the opposite - `max_bgsub`
+> for cells (as the more sensitive statistic for a localised transient) and
+> `mean_bgsub` for bands, described as an intentional asymmetry. That was the
+> original design; the QC described in `calcium_config.py` §4 overturned it.
+> Kept here so the change of mind is on the record.
 
 ### 2.2 Why `M = median(Lifeact_vDA_pre) / median(Lifeact_vDA_post)`?
 
