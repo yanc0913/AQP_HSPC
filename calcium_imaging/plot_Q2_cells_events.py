@@ -76,6 +76,15 @@ plt.rcParams.update({
     "font.family":      cfg.FONT["family"],
     "font.sans-serif":  cfg.FONT["sans"],
     "axes.linewidth":   STYLE["lw"]["axis"],
+    # cfg.FONT is authoritative for per-dataset figures: axis labels and tick
+    # labels used to fall through to matplotlib's 10 pt default, ignoring the
+    # configured values entirely.
+    "font.size":        cfg.FONT["tick"],
+    "axes.titlesize":   cfg.FONT["title"],
+    "axes.labelsize":   cfg.FONT["label"],
+    "xtick.labelsize":  cfg.FONT["tick"],
+    "ytick.labelsize":  cfg.FONT["tick"],
+    "legend.fontsize":  cfg.FONT["legend"],
 })
 
 
@@ -1503,11 +1512,19 @@ def main():
                         ax.set_xticks(tick_pos)
                         ax.set_xticklabels(tick_lab)
                         ax.set_ylabel(metric["ylabel_short" if pub else "ylabel_long"])
+                        # Legend goes BELOW the axes: the top of this panel is
+                        # occupied by stacked Tukey brackets, and at publication
+                        # font sizes an upper-right legend collides with the
+                        # widest one. save_both uses bbox_inches="tight", so
+                        # content outside the axes is not clipped.
                         ax.legend(
                             handles=[Patch(facecolor=genotype_box_color(g), edgecolor="black",
                                            alpha=STYLE["box"]["box_alpha"], label=g)
                                      for g in genos_present],
-                            frameon=False, fontsize=cfg.FONT["legend"], loc="upper right",
+                            frameon=False, fontsize=cfg.FONT["legend"],
+                            loc="upper center", bbox_to_anchor=(0.5, -0.09),
+                            ncol=max(1, len(genos_present)), handlelength=1.3,
+                            columnspacing=1.6, borderaxespad=0.0,
                         )
 
                         # Two-way ANOVA (corner) + Tukey HSD brackets (significant pairs)

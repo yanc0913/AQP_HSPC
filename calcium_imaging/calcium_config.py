@@ -81,14 +81,20 @@ Q3_CONDITIONS_ORDER       = ["E3", "DMSO", "GsMTx", "Yoda", "ISO", "BDM"]
 
 
 # ----- Font sizes (pt). Set any value to None to use matplotlib's default. -----
+# These now drive matplotlib rcParams in every per-dataset plot script, so the
+# values here are authoritative for Q1/Q2/Q3 output (they used to be declared
+# but ignored for `label`/`tick`, which silently fell back to matplotlib's
+# 10 pt default). Sized to match the main-figure row layouts, so a per-dataset
+# panel dropped into a supplementary figure carries the same typography.
+# The main-figure scripts pass their own explicit sizes and are unaffected.
 FONT = dict(
     family       = "sans-serif",
     sans         = ["Arial", "Helvetica", "DejaVu Sans"],
-    title        = 7,
-    label        = 7,
-    tick         = 6,
-    legend       = 6,
-    title_pad    = 4,
+    title        = 10.5,
+    label        = 9.5,
+    tick         = 9,
+    legend       = 9,
+    title_pad    = 6,
 )
 
 
@@ -152,7 +158,7 @@ STATS = dict(
     show_omnibus         = True,             # print omnibus p in top-left corner
     show_pairwise        = True,             # draw brackets with corrected p-values
     bracket_lw           = 0.6,
-    pval_fontsize        = 6,
+    pval_fontsize        = 8.5,
     bracket_top_band     = 0.78,             # brackets start at 78% of axis height
     bracket_max_band     = 0.98,             # don't draw above 98%
     pval_decimals        = 3,                # display p to 3 sig figs

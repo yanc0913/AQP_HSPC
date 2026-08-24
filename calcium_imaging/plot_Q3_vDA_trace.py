@@ -44,9 +44,18 @@ POST_SHOW_MIN = cfg.POST_SHOW_MIN
 GAP_W         = cfg.GAP_W
 
 plt.rcParams.update({
-    "font.family":     cfg.FONT["family"],
-    "font.sans-serif": cfg.FONT["sans"],
-    "axes.linewidth":  STYLE["lw"]["axis"],
+    "font.family":      cfg.FONT["family"],
+    "font.sans-serif":  cfg.FONT["sans"],
+    "axes.linewidth":   STYLE["lw"]["axis"],
+    # cfg.FONT is authoritative for per-dataset figures: axis labels and tick
+    # labels used to fall through to matplotlib's 10 pt default, ignoring the
+    # configured values entirely.
+    "font.size":        cfg.FONT["tick"],
+    "axes.titlesize":   cfg.FONT["title"],
+    "axes.labelsize":   cfg.FONT["label"],
+    "xtick.labelsize":  cfg.FONT["tick"],
+    "ytick.labelsize":  cfg.FONT["tick"],
+    "legend.fontsize":  cfg.FONT["legend"],
 })
 
 
