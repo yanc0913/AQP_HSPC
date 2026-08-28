@@ -90,11 +90,11 @@ Q3_CONDITIONS_ORDER       = ["E3", "DMSO", "GsMTx", "Yoda", "ISO", "BDM"]
 FONT = dict(
     family       = "sans-serif",
     sans         = ["Arial", "Helvetica", "DejaVu Sans"],
-    title        = 10.5,
-    label        = 9.5,
-    tick         = 9,
-    legend       = 9,
-    title_pad    = 6,
+    title        = 18,
+    label        = 15,
+    tick         = 13,
+    legend       = 13,
+    title_pad    = 8,
 )
 
 
@@ -102,7 +102,7 @@ FONT = dict(
 # These map to STYLE['fig'] in the old plot_style.py.
 # Example: FIG_SIZE['box'] = None  →  plt.subplots() called without figsize argument.
 FIG_SIZE = dict(
-    box = (3.2, 4.2),    # boxplot panels (Prism-like: narrow + tall)
+    box = (3.6, 4.6),    # boxplot panels (Prism-like: narrow + tall)
     l1  = (5.3, 3.2),    # per-embryo/all-cells trace panel
     l2  = (5.0, 3.0),    # per-embryo mean trace
     l3  = (6.2, 3.4),    # repeat+pooled trace (the main one)
@@ -158,7 +158,7 @@ STATS = dict(
     show_omnibus         = True,             # print omnibus p in top-left corner
     show_pairwise        = True,             # draw brackets with corrected p-values
     bracket_lw           = 0.6,
-    pval_fontsize        = 8.5,
+    pval_fontsize        = 12.5,
     bracket_top_band     = 0.78,             # brackets start at 78% of axis height
     bracket_max_band     = 0.98,             # don't draw above 98%
     pval_decimals        = 3,                # display p to 3 sig figs
@@ -603,6 +603,12 @@ def pub_label(cond: str) -> str:
 # Target number of y-axis major ticks on box plots (denser = smaller steps).
 # Passed to matplotlib's MaxNLocator; the locator still snaps to "nice" values.
 BOX_YTICK_NBINS = 18
+
+# Rotation (degrees) for boxplot x tick labels. At publication font sizes four
+# condition labels ("DMSO", "Yoda1", "E3", "GsMTx4") do not fit horizontally
+# across a 3.2 in panel; rotating frees the horizontal space, the same fix the
+# main-figure row layouts use. 0 = horizontal (previous behaviour).
+BOX_XTICK_ROT = 0
 
 
 def boxplot_ylim_for(pair_id: str):

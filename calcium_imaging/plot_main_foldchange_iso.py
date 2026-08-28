@@ -140,7 +140,7 @@ OUT_DIR = MAIN_FIG_DIRS["ISO_MIC_Piezo"]
 CELL_CLASS_COL, COND_COL, GENO_COL = "cell_class", "condition", "genotype"
 
 # Reader-facing panel titles (line 1 = metric, line 2 = cell class).
-METRIC_PUB = {"amplitude": r"Ca$^{2+}$ Amplitude",
+METRIC_PUB = {"amplitude": r"Ca$^{2+}$ Intensity",
               "events":    r"Ca$^{2+}$ Event Frequency",
               "duration":  r"Ca$^{2+}$ Event Duration"}
 
@@ -363,7 +363,7 @@ def main():
         for j, (mlab, mkey, mcol, _) in enumerate(METRICS):
             draw_panel(axes[i][j], panels[(clab, mlab)], col_ylim[mlab], ref,
                        fc_ylab(mkey), panel_title(mkey, cclass))
-    fig.suptitle("ISO vs E3 effect: WT | MIC vs piezo-crispant.  Amplitude: "
+    fig.suptitle("ISO vs E3 effect: WT | MIC vs piezo-crispant.  Intensity: "
                  "log2 fold change;  events: difference (ISO - E3)",
                  fontsize=cfg.FONT["title"] + 1)
     fig.tight_layout(rect=(0, 0, 1, 0.98))

@@ -390,7 +390,16 @@ def add_pvals(ax, data_list: list[np.ndarray], x_positions: Sequence[float],
     yr_cur = y1_cur - y0_cur
 
     # Bracket geometry: starts a bit above the data, each new bracket steps up
-    step = 0.06 * yr_cur
+    # Bracket spacing must clear one line of p-value text. At small fonts the
+    # historic 6% of the axis was enough; at publication sizes it is not, so
+    # derive the minimum from the actual font size and axis height.
+    _fs = float(cfg.STATS.get("pval_fontsize", cfg.FONT["legend"]))
+    try:
+        _ax_pt = ax.get_window_extent().height * 72.0 / ax.figure.dpi
+    except Exception:
+        _ax_pt = 250.0
+    _min_step = (1.9 * _fs / _ax_pt) if _ax_pt > 0 else 0.06
+    step = max(0.06, _min_step) * yr_cur
     h    = 0.018 * yr_cur
     gap  = 0.04 * yr_cur            # gap between top of data and first bracket
 
@@ -528,11 +537,20 @@ def draw_sig_brackets(ax, sig_pairs, xpos_by_label, data_by_label, decimals=3):
     # draw shorter-span brackets first so they nest underneath
     pairs.sort(key=lambda t: abs(xpos_by_label[t[0]] - xpos_by_label[t[1]]))
     y = data_max + gap
-    needed = y + step * len(pairs) + h + 0.04 * yr
+    # Headroom above the topmost bracket. The genotype x drug panel pins a
+    # "2-way ANOVA (II)" label at 98% of the axis, so the stack must stop well
+    # short of the top or the two collide - which it did once the p-value font
+    # grew. Reserve roughly two text lines, measured from the real axis height.
+    fs = cfg.STATS.get("pval_fontsize", cfg.FONT["legend"])
+    try:
+        _ax_pt = ax.get_window_extent().height * 72.0 / ax.figure.dpi
+    except Exception:
+        _ax_pt = 250.0
+    top_pad = max(0.04, 2.6 * float(fs) / _ax_pt) * yr
+    needed = y + step * len(pairs) + h + top_pad
     if needed > y1:
         ax.set_ylim(y0, needed)
     lw = cfg.STATS.get("bracket_lw", 1.2)
-    fs = cfg.STATS.get("pval_fontsize", cfg.FONT["legend"])
     for (a, b, p) in pairs:
         x1, x2 = xpos_by_label[a], xpos_by_label[b]
         ax.plot([x1, x1, x2, x2], [y, y + h, y + h, y], color="black", lw=lw)
@@ -1419,10 +1437,10 @@ def main():
             dict(
                 key="amplitude",
                 col=f"embryo_mean_amplitude_post_{wsuf}min",
-                ylabel_long  = f"mean trace amplitude (post {wsuf} min)  [embryo unit]",
-                ylabel_short = r"mean amplitude ($F/F_0$)",
-                title_metric = "mean amplitude",
-                title_pub    = r"Ca$^{2+}$ Amplitude",
+                ylabel_long  = f"mean trace intensity (post {wsuf} min)  [embryo unit]",
+                ylabel_short = r"mean intensity ($F/F_0$)",
+                title_metric = "mean intensity",
+                title_pub    = r"Ca$^{2+}$ Intensity",
             ),
             dict(
                 key="duration",
@@ -1510,7 +1528,12 @@ def main():
 
                         draw_prism_box(ax, data_list, xpos, fill_colors)
                         ax.set_xticks(tick_pos)
-                        ax.set_xticklabels(tick_lab)
+                        _rot = float(getattr(cfg, "BOX_XTICK_ROT", 0) or 0)
+                        if _rot:
+                            ax.set_xticklabels(tick_lab, rotation=_rot, ha="right",
+                                               rotation_mode="anchor")
+                        else:
+                            ax.set_xticklabels(tick_lab)
                         ax.set_ylabel(metric["ylabel_short" if pub else "ylabel_long"])
                         # Legend goes BELOW the axes: the top of this panel is
                         # occupied by stacked Tukey brackets, and at publication
@@ -1532,10 +1555,14 @@ def main():
                         dec = cfg.STATS.get("pval_decimals", 3)
                         anova_label, anova_stats, _ = twoway_anova_label(
                             stat_df, "value", decimals=dec)
+                        # The ANOVA label sits ABOVE the axes rather than in the
+                        # corner: the Tukey brackets stack across the full width
+                        # of the top strip, so an in-axes label collides with the
+                        # widest one. The title pad below is widened to match.
+                        _anova_fs = cfg.STATS.get("pval_fontsize", cfg.FONT["legend"])
                         if anova_label:
-                            ax.text(0.02, 0.98, anova_label, transform=ax.transAxes,
-                                    ha="left", va="top",
-                                    fontsize=cfg.STATS.get("pval_fontsize", cfg.FONT["legend"]))
+                            ax.text(0.0, 1.012, anova_label, transform=ax.transAxes,
+                                    ha="left", va="bottom", fontsize=_anova_fs)
                         if anova_stats is not None:
                             anova_rows.append(dict(
                                 pair_id=pid, cell_class=cell_class,
@@ -1572,7 +1599,8 @@ def main():
                             f"{metric['title_pub']}\n{cfg.cell_class_display(cell_class)}" if pub else
                             f"Q2 {metric['title_metric']} | {pid} | {cell_class}\n"
                             f"(genotype × drug; embryo unit)",
-                            pad=cfg.FONT["title_pad"], fontsize=cfg.FONT["title"]
+                            pad=cfg.FONT["title_pad"] + (1.5 * _anova_fs if anova_label else 0),
+                            fontsize=cfg.FONT["title"]
                         )
                         style_axes(ax)
                         apply_dense_yticks(ax)
@@ -1605,7 +1633,13 @@ def main():
                         draw_prism_box(ax, data_list, xpos, colors)
 
                         ax.set_xticks(xpos)
-                        ax.set_xticklabels(labels_short if pub else labels_long)
+                        _rot = float(getattr(cfg, "BOX_XTICK_ROT", 0) or 0)
+                        _lab = labels_short if pub else labels_long
+                        if _rot:
+                            ax.set_xticklabels(_lab, rotation=_rot, ha="right",
+                                               rotation_mode="anchor")
+                        else:
+                            ax.set_xticklabels(_lab)
 
                         # y-axis override only applies to the events box (back-compat).
                         # For amplitude / duration, always auto-scale (different units).

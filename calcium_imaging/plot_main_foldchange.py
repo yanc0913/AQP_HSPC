@@ -133,7 +133,7 @@ LOG2 = True
 OUT_DIR = MAIN_FIG_DIRS["Yoda_GsMTx"]
 
 # Reader-facing panel titles (line 1 = metric, line 2 = cell class).
-METRIC_PUB = {"amplitude": r"Ca$^{2+}$ Amplitude",
+METRIC_PUB = {"amplitude": r"Ca$^{2+}$ Intensity",
               "events":    r"Ca$^{2+}$ Event Frequency",
               "duration":  r"Ca$^{2+}$ Event Duration"}
 
@@ -331,7 +331,7 @@ def main() -> None:
         for j, (mlab, mkey, mcol, _) in enumerate(METRICS):
             draw_panel(axes[i][j], panels[(clab, mlab)], col_ylim[mlab], ref,
                        fc_ylab(mkey), panel_title(mkey, cclass))
-    fig.suptitle("Effect vs own vehicle — 30hpf | 48hpf.  Amplitude: log2 fold "
+    fig.suptitle("Effect vs own vehicle — 30hpf | 48hpf.  Intensity: log2 fold "
                  "change;  events: difference (drug - vehicle mean)",
                  fontsize=cfg.FONT["title"] + 1)
     fig.tight_layout(rect=(0, 0, 1, 0.98))
