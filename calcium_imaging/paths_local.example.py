@@ -42,9 +42,14 @@ DATASET_ROOTS = {
 # Output directories for the assembled main figures.
 MAIN_FIG_DIRS = {
     "Yoda_GsMTx":    DATA_BASE / "_MainFigures" / "Yoda_GsMTx",
-    "ISO_MIC_Piezo": DATA_BASE / "_MainFigures" / "ISO_MIC_Piezo",
     "Q1_ratio":      DATA_BASE / "_MainFigures" / "Q1_vDA_dDA_ratio",
-    # Same ISO figure, but the WT bar's p comes from the E3-vs-ISO-only
-    # subset (a family of one) instead of the Holm-corrected three-group run.
-    "ISO_MIC_Piezo_E3ISO": DATA_BASE / "_MainFigures" / "ISO_MIC_Piezo_E3ISOp",
+
+    # --- The ISO figure exists in TWO versions. They differ ONLY in the WT
+    # --- bar's p-value; the folder names say which is which.
+    # MAIN: the version that goes in the paper. WT bar = plain Welch t-test,
+    #       read from the E3-vs-ISO-only run (that panel asks only about ISO).
+    "ISO_MIC_Piezo_MAIN": DATA_BASE / "_MainFigures" / "ISO_MIC_Piezo_MAINFIG_ttest",
+    # ALT: reference only, NOT for the paper. WT bar = Holm-corrected within the
+    #      E3 family of the three-group E3/ISO/BDM run.
+    "ISO_MIC_Piezo_ALT":  DATA_BASE / "_MainFigures" / "ISO_MIC_Piezo_ALT_holm_reference_only",
 }

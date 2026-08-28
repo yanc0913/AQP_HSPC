@@ -20,13 +20,16 @@ amplitude/events), box + embryo dots, reference at 0.
 
 The p above each bar is NOT recomputed here. It is read back from the source
 experiment's built stats workbook, so the bar prints the value produced by the
-method that design actually warrants, and matches the per-dataset figure for
-the same comparison exactly:
-  * WT              -> Welch + Holm within the E3 control family (ISO and BDM
-                       are both tested against E3 in that experiment)
-  * MIC / Piezo     -> Tukey HSD from the genotype x drug two-way ANOVA
-The method used for every bar is recorded in the `p_test` column. All
-between-group comparisons go to the workbook.
+method that design warrants, and matches the per-dataset figure exactly.
+MIC and Piezo always use Tukey HSD from the genotype x drug two-way ANOVA.
+
+TWO VARIANTS are written, differing only in the WT bar (see VARIANTS below):
+  * ..._MAINFIG_ttest            - the paper's figure. WT p = plain Welch
+                                   t-test from the E3-vs-ISO-only run.
+  * ..._ALT_holm_reference_only  - reference. WT p = Holm-corrected within the
+                                   E3 family of the three-group E3/ISO/BDM run.
+Each folder gets a READ_ME_which_version_is_this.txt so they cannot be mixed
+up. The method for every bar is recorded in the `p_test` column.
 
 Outputs to OUT_DIR:
   * combined 2x2:  main_iso_foldchange_2x2.{png,svg}
@@ -136,7 +139,7 @@ def fc_ylab_short(mkey: str) -> str:
     return "log2 fold change" + _NL + "(ISO / E3)"
 
 LOG2 = True
-OUT_DIR = MAIN_FIG_DIRS["ISO_MIC_Piezo"]
+OUT_DIR = MAIN_FIG_DIRS["ISO_MIC_Piezo_MAIN"]   # overridden per variant
 CELL_CLASS_COL, COND_COL, GENO_COL = "cell_class", "condition", "genotype"
 
 # Reader-facing panel titles (line 1 = metric, line 2 = cell class).
@@ -482,23 +485,50 @@ def main():
 # and always use its Tukey HSD.
 # =============================================================================
 VARIANTS = [
-    dict(label="holm  (WT p Holm-corrected within E3 family)",
-         out_key="ISO_MIC_Piezo",       stats_subtree={}),
-    dict(label="e3iso (WT p from the E3-vs-ISO-only subset)",
-         out_key="ISO_MIC_Piezo_E3ISO",
-         stats_subtree={"ISO": "_py_out_%smin_E3_ISO" % WSUF}),
+    dict(key="MAIN",
+         out_key="ISO_MIC_Piezo_MAIN",
+         stats_subtree={"ISO": "_py_out_%smin_E3_ISO" % WSUF},
+         label="MAIN FIGURE - WT bar = Welch t-test (E3-vs-ISO-only run)",
+         readme=("THIS IS THE MAIN FIGURE FOR THE PAPER." + chr(10) * 2 +
+                 "The WT bar's p-value is a plain two-tailed Welch t-test, read from the" + chr(10) +
+                 "E3-vs-ISO-only run, because this panel asks only about ISO vs E3." + chr(10) * 2 +
+                 "MIC and Piezo bars come from the genotype x drug 2x2 and use Tukey HSD." + chr(10) * 2 +
+                 "The three-group E3/ISO/BDM supplementary figure reports the SAME E3-vs-ISO" + chr(10) +
+                 "contrast as a one-way ANOVA with Holm-corrected post-hocs, so its p differs" + chr(10) +
+                 "(e.g. flat intensity 0.00187 here vs 0.00373 there). That is deliberate -" + chr(10) +
+                 "the multiple-comparison family differs - and each figure legend states the" + chr(10) +
+                 "method. Source data must ship BOTH sets of p-values." + chr(10) * 2 +
+                 "The sibling folder ISO_MIC_Piezo_ALT_holm_reference_only is NOT for the" + chr(10) +
+                 "paper; it is the same figure carrying the Holm-corrected WT p, kept for" + chr(10) +
+                 "comparison." + chr(10))),
+    dict(key="ALT",
+         out_key="ISO_MIC_Piezo_ALT",
+         stats_subtree={},
+         label="reference only - WT bar = Holm-corrected (three-group run)",
+         readme=("REFERENCE ONLY - DO NOT USE THIS VERSION IN THE PAPER." + chr(10) * 2 +
+                 "Identical to ISO_MIC_Piezo_MAINFIG_ttest except that the WT bar's p-value" + chr(10) +
+                 "is Holm-corrected within the E3 control family of the three-group" + chr(10) +
+                 "E3/ISO/BDM run (roughly 2x the t-test value)." + chr(10) * 2 +
+                 "Kept only so the two conventions can be compared side by side." + chr(10) +
+                 "The paper's main figure is ISO_MIC_Piezo_MAINFIG_ttest." + chr(10))),
 ]
 
 
-def run_variant(out_key: str, stats_subtree: dict, label: str) -> None:
+def run_variant(out_key: str, stats_subtree: dict, label: str, readme: str,
+                key: str) -> None:
     g = globals()
-    g["OUT_DIR"] = MAIN_FIG_DIRS[out_key]
+    out = MAIN_FIG_DIRS[out_key]
+    g["OUT_DIR"] = out
     g["STATS_SUBTREE"] = dict(stats_subtree)
     _STATS_CACHE.clear()          # p-values are cached per dataset key
-    print(chr(10) + "=== variant: " + str(label) + " ===")
+    print(chr(10) + "=== variant " + key + ": " + label + " ===")
     main()
+    # a note in the folder itself, so the two versions cannot be mixed up even
+    # when the figures are opened without the folder name in view
+    out.mkdir(parents=True, exist_ok=True)
+    (out / "READ_ME_which_version_is_this.txt").write_text(readme, encoding="utf-8")
 
 
 if __name__ == "__main__":
     for _v in VARIANTS:
-        run_variant(_v["out_key"], _v["stats_subtree"], _v["label"])
+        run_variant(**_v)
