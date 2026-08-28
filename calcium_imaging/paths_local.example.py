@@ -53,3 +53,7 @@ MAIN_FIG_DIRS = {
     #      E3 family of the three-group E3/ISO/BDM run.
     "ISO_MIC_Piezo_ALT":  DATA_BASE / "_MainFigures" / "ISO_MIC_Piezo_ALT_holm_reference_only",
 }
+
+# Root for assembled supplementary figures (collect_supp_figures.py gathers the
+# per-dataset panels here, mirroring the _MainFigures layout).
+SUPP_FIG_ROOT = DATA_BASE / "_SuppFigures"
