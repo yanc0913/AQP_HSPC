@@ -266,7 +266,7 @@ _PLANNED_FALLBACK_WARNED: set = set()
 
 
 def add_pvals(ax, data_list: list[np.ndarray], x_positions: Sequence[float],
-              labels: Optional[Sequence[str]] = None):
+              labels: Optional[Sequence[str]] = None, force_fallback: bool = False):
     """Draw omnibus + pairwise p-values inside the plot area (compact).
 
     Bracket placement:
@@ -286,7 +286,7 @@ def add_pvals(ax, data_list: list[np.ndarray], x_positions: Sequence[float],
     # vehicle (first element) per planned pair -> lets us group comparisons that
     # share a control into one multiple-comparison family.
     planned_vehicle = {frozenset((str(a), str(b))): str(a) for a, b in planned}
-    use_planned = bool(planned_set) and labels is not None
+    use_planned = bool(planned_set) and labels is not None and not force_fallback
     if use_planned:
         _label_set = {str(x) for x in labels}
         if not any(p.issubset(_label_set) for p in planned_set):
@@ -406,8 +406,17 @@ def add_pvals(ax, data_list: list[np.ndarray], x_positions: Sequence[float],
     y_first = data_max + gap
     y_top   = y_first + step * len(pairs) + h
 
-    # Extend ylim if needed so brackets + omnibus label fit comfortably
-    needed_top = y_top + 0.04 * yr_cur
+    # Extend ylim so the brackets AND the omnibus label both fit. The label is
+    # pinned at 98% of the axis, so when one is drawn the stack has to stop
+    # roughly two text lines short of the top or the two overlap - which they
+    # did once the p-value font grew. Measure from the real axis height.
+    _fs_pad = float(cfg.STATS.get("pval_fontsize", cfg.FONT["legend"]))
+    try:
+        _ax_pt = ax.get_window_extent().height * 72.0 / ax.figure.dpi
+    except Exception:
+        _ax_pt = 250.0
+    _label_pad = (2.6 * _fs_pad / _ax_pt) if omnibus_label else 0.0
+    needed_top = y_top + max(0.04, _label_pad) * yr_cur
     if needed_top > y1_cur:
         ax.set_ylim(y0_cur, needed_top)
 
@@ -1672,7 +1681,10 @@ def main():
                         # p-values (uses cfg.STATS); positions itself above the data.
                         # cond_order is aligned with data_list, so planned-pairs
                         # mode can match comparisons by condition token.
-                        stat_res = add_pvals(ax, data_list, xpos, labels=cond_order)
+                        _force_fb = str(pid) in (
+                            getattr(cfg, "STATS_FALLBACK_PAIR_IDS", set()) or set())
+                        stat_res = add_pvals(ax, data_list, xpos, labels=cond_order,
+                                             force_fallback=_force_fb)
                         if stat_res is not None:
                             if stat_res.get("omnibus_p") is not None:
                                 pairwise_rows.append(dict(

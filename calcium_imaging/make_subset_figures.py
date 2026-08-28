@@ -82,6 +82,10 @@ def run_job(dataset: str, conditions: list, planned_pairs: list, tag: str) -> Pa
     # restrict the conditions AND the fold-change planned pairs
     cfg.Q2_CELLS_CONDITIONS_ORDER = list(conditions)
     cfg.STATS["planned_pairs"] = [tuple(p) for p in planned_pairs]
+    # The full three-group run is reported as a one-way ANOVA with all pairwise
+    # post-hocs; this subset is the two-group t-test figure, so it must not
+    # inherit that fallback.
+    cfg.STATS_FALLBACK_PAIR_IDS = set()
     print(f"    conditions   = {conditions}")
     print(f"    planned_pairs= {planned_pairs}")
 

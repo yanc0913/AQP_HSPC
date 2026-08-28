@@ -610,6 +610,16 @@ BOX_YTICK_NBINS = 18
 # main-figure row layouts use. 0 = horizontal (previous behaviour).
 BOX_XTICK_ROT = 0
 
+# pair_ids whose boxplots should use the omnibus + ALL-pairwise path instead of
+# the planned-pairs path, i.e. reported as a one-way ANOVA with every pairwise
+# post-hoc shown. Used for the three-group E3/ISO/BDM supplementary figure: all
+# three groups are displayed, so all three contrasts are reported and the
+# omnibus ANOVA p is printed in the corner. The main figure keeps the plain
+# two-group t-test by reading from the E3-vs-ISO-only subset tree instead
+# (see make_subset_figures.py) - the two figures deliberately carry different
+# p-values for the same contrast, stated in each figure legend.
+STATS_FALLBACK_PAIR_IDS = {"E3_vs_ISO_vs_BDM"}
+
 
 def boxplot_ylim_for(pair_id: str):
     """
