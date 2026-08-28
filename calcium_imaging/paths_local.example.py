@@ -44,4 +44,7 @@ MAIN_FIG_DIRS = {
     "Yoda_GsMTx":    DATA_BASE / "_MainFigures" / "Yoda_GsMTx",
     "ISO_MIC_Piezo": DATA_BASE / "_MainFigures" / "ISO_MIC_Piezo",
     "Q1_ratio":      DATA_BASE / "_MainFigures" / "Q1_vDA_dDA_ratio",
+    # Same ISO figure, but the WT bar's p comes from the E3-vs-ISO-only
+    # subset (a family of one) instead of the Holm-corrected three-group run.
+    "ISO_MIC_Piezo_E3ISO": DATA_BASE / "_MainFigures" / "ISO_MIC_Piezo_E3ISOp",
 }

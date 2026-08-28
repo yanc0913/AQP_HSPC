@@ -160,11 +160,27 @@ def _vals(df, geno, cond, cclass, col):
 _STATS = Path("_py_out_%smin" % WSUF) / "tables" / "Q2_stats_pvalues.xlsx"
 _STATS_CACHE = {}
 
+# Which output tree each bar's p-value is read from.
+#
+# WT comes from the E3/ISO/BDM experiment. In the full three-group tree, ISO and
+# BDM share the E3 control, so that p is Holm-corrected within a family of two.
+# This figure displays ONLY the ISO contrast, so it reads from the E3-vs-ISO
+# subset tree (make_subset_figures.py), where the same comparison is a family of
+# one and the p is a plain Welch t-test.
+#
+# NOTE: this is a choice about what the multiple-comparison family is, not a
+# formatting detail. If the three-group figure reporting the BDM comparison also
+# appears in the paper, the family arguably includes BDM and this should be set
+# back to {} so the corrected value is used everywhere.
+STATS_SUBTREE = {}   # set per variant by run_variant() below
+
 
 def _load_pairwise(dkey: str):
     """Cached `pairwise` sheet of a dataset's built stats workbook."""
     if dkey not in _STATS_CACHE:
-        path = DATASET_ROOTS[dkey] / _STATS
+        sub = STATS_SUBTREE.get(dkey)
+        path = (DATASET_ROOTS[dkey] / sub / "tables" / "Q2_stats_pvalues.xlsx"
+                if sub else DATASET_ROOTS[dkey] / _STATS)
         try:
             _STATS_CACHE[dkey] = pd.read_excel(path, sheet_name="pairwise")
         except Exception as e:
@@ -451,5 +467,38 @@ def main():
     print(f"[OK] wrote 1x4 row + 2x2 + 4 individual panels + workbook to {OUT_DIR}")
 
 
-if __name__ == "__main__":
+# =============================================================================
+# Variants: the same figure, differing only in what the WT bar's p-value
+# treats as its multiple-comparison family. Both are produced, into separate
+# folders, so the choice can be made when the paper is assembled rather than
+# baked in here.
+#
+#   holm   - WT p read from the full E3/ISO/BDM run, where ISO and BDM share the
+#            E3 control and are Holm-corrected as a family of two.
+#   e3iso  - WT p read from the E3-vs-ISO-only subset run, a family of one, so a
+#            plain Welch t-test.
+#
+# MIC and Piezo are identical in both: they come from the genotype x drug 2x2
+# and always use its Tukey HSD.
+# =============================================================================
+VARIANTS = [
+    dict(label="holm  (WT p Holm-corrected within E3 family)",
+         out_key="ISO_MIC_Piezo",       stats_subtree={}),
+    dict(label="e3iso (WT p from the E3-vs-ISO-only subset)",
+         out_key="ISO_MIC_Piezo_E3ISO",
+         stats_subtree={"ISO": "_py_out_%smin_E3_ISO" % WSUF}),
+]
+
+
+def run_variant(out_key: str, stats_subtree: dict, label: str) -> None:
+    g = globals()
+    g["OUT_DIR"] = MAIN_FIG_DIRS[out_key]
+    g["STATS_SUBTREE"] = dict(stats_subtree)
+    _STATS_CACHE.clear()          # p-values are cached per dataset key
+    print(chr(10) + "=== variant: " + str(label) + " ===")
     main()
+
+
+if __name__ == "__main__":
+    for _v in VARIANTS:
+        run_variant(_v["out_key"], _v["stats_subtree"], _v["label"])
