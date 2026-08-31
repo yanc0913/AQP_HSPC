@@ -81,7 +81,10 @@ JOBS = [
 ]
 
 HEADER = (
-    "Ca2+ intensity boxplots, copied from the per-dataset pipeline output.\n"
+    "Ca2+ intensity and event-frequency boxplots, copied from the per-dataset\n"
+    "pipeline output. Four panels per folder:\n"
+    "    Ca_intensity_ElongatedCell / Ca_intensity_RoundCell\n"
+    "    Ca_events_ElongatedCell    / Ca_events_RoundCell\n"
     "Source: {src}\n"
     "These files are copies - re-running the pipeline and this script "
     "regenerates them.\n\n"
