@@ -8,60 +8,65 @@ This code produces the calcium-imaging analysis and figures in Kondrychyn
 transition"* (Figure 5, Supplementary Figures 9 and 10).
 
 > **Code only.** Raw imaging data and analysis outputs are not in this
-> repository. Point the pipeline at your own data by copying
-> `paths_local.example.py` → `paths_local.py` (git-ignored).
+> repository. Copy `paths_local.example.py` → `paths_local.py` (git-ignored)
+> and point it at your own data.
+
+## Contents
+
+- [1. Pipeline overview](#1-pipeline-overview)
+- [2. Setup](#2-setup)
+- [3. Input data](#3-input-data) — the Fiji step, ROI names, CSV format, layout
+- [4. Running](#4-running)
+- [5. Methods](#5-methods) — corrections, F/F₀, event detection, statistics
+- [6. Outputs](#6-outputs) — directory tree, every table, every plot
+- [7. Parameters and Methods alignment](#7-parameters-and-methods-alignment)
+- [8. Load-bearing decisions](#8-load-bearing-decisions)
+- [9. Gotchas and tests](#9-gotchas-and-tests)
 
 ---
 
-## 1. What happens upstream, in Fiji
+## 1. Pipeline overview
 
-Two **separate** Fiji steps run before any Python:
+```
+Fiji, upstream and separate:
+    1. register the time-series (SIFT / linear stack alignment)  ──► "Aligned_" prefix
+    2. Calcium_ROI_selection_v4.ijm: draw and measure ROIs
+                                     ──► <movie>_roi_timeseries_allChannels.csv
+                                     ──► <movie>_ROIs.zip
+       │
+       ▼
+calcium_qc.py            raw CSVs ──► per-ROI quality metrics   (run FIRST; read-only)
+       ▼
+calcium_build_tables.py  raw CSVs ──► long table ──► band traces ──► Lifeact M
+                         correction ──► F/F0 ──► event detection ──► per-cell and
+                         per-embryo tables
+       ▼
+plot_Q1 / plot_Q2 / plot_Q3     tables ──► figures (PNG + SVG) + stats workbook
+       ▼
+plot_main_*  /  collect_supp_figures  /  build_source_data  /  make_condition_movie
+```
 
-1. **Registration** — SIFT / linear stack alignment with interpolation. This is
-   where the `Aligned_` filename prefix comes from.
-2. **ROI selection and measurement** — the included macro
-   `Calcium_ROI_selection_v4.ijm`. It draws and measures ROIs and exports one
-   `*_allChannels.csv` per movie. **It does no registration.**
-
-ROIs are named by what they are, and the Python side depends on those names:
-
-| ROI name | Meaning |
+| Script | Role |
 |---|---|
-| `DA_band` | ventral dorsal-aorta band ("vDA") — the region of interest |
-| `DA_band_dorsal` | dorsal band ("dDA") — the ratio reference |
-| `BG` | background, subtracted from every other ROI |
-| `flat_01`, `flat_02`, … | single elongated cells |
-| `round_01`, `round_02`, … | single round cells |
-
-**Condition and genotype are parsed from the FILENAME, not the folder.** Folders
-are organisational only. The token lists live in `calcium_config.py`
-(`CONDITION_ALIASES`, `GENOTYPE_ALIASES`); a movie with no genotype token
-becomes `WT`, so experiments without genotypes behave exactly as before.
-
----
-
-## 2. Data layout
-
-```
-DATA_BASE/
-  Analysis_<experiment>/          <- cfg.ROOT points at one of these
-      <batch>/<drug>/*_allChannels.csv
-      _py_out_20min/              <- created by the pipeline
-          tables/  plots_png/  plots_svg/
-      _qc/                        <- created by calcium_qc.py
-  _MainFigures/                   <- cross-dataset figures
-  _SuppFigures/                   <- collected supplementary panels
-  _SourceData/                    <- Source_Data.xlsx
-```
-
-**`discover_csvs` skips any directory whose name starts with `_`.** Every
-output, temp and QC tree is underscore-prefixed for exactly that reason. A new
-working directory that is *not* underscore-prefixed will be ingested as source
-data.
+| `calcium_config.py` | **Every** tunable parameter. Nothing else should be edited to change the analysis. |
+| `calcium_qc.py` | Independent QC sentinel; reads raw CSVs, never writes into the analysis |
+| `calcium_build_tables.py` | The data core: CSVs → all analysis tables |
+| `plot_Q1_vDA_dDA_ratio.py` | vDA/dDA ratio figures |
+| `plot_Q2_cells_events.py` | Single-cell traces, boxplots, **and all the statistics** |
+| `plot_Q3_vDA_trace.py` | vDA band trace figures |
+| `run_all.py` | Orchestrator; each step in its own subprocess |
+| `plot_main_foldchange.py` | Cross-dataset fold change, Yoda1 / GsMTx4 (Fig 5e–h) |
+| `plot_main_foldchange_iso.py` | Cross-dataset, ISO / MIC / piezo crispant (Fig 5i–l) |
+| `plot_main_q1_ratio.py` | vDA/dDA ratio, 30 vs 48 hpf (Supp Fig 9b) |
+| `make_subset_figures.py` | Re-run one dataset restricted to a subset of conditions |
+| `collect_supp_figures.py` | Copy the supplementary panels into one folder |
+| `build_source_data.py` | Source Data workbook, one sheet per figure |
+| `make_condition_movie.py` | 2×2 condition movies |
+| `plot_style.py` | Shared matplotlib style |
 
 ---
 
-## 3. Setup
+## 2. Setup
 
 Tested on **Python 3.10.19** (conda). Nothing requires 3.11.
 
@@ -73,33 +78,102 @@ cp paths_local.example.py paths_local.py     # then edit DATA_BASE
 `openpyxl` is needed for the stats workbook and the Source Data builder;
 `plot_Q2` falls back to CSVs without it.
 
-Two optional extras, only for the movie builder:
+For the movie builder only: `tifffile`, `imageio`, `Pillow`, and Fiji's
+`Green Fire Blue.lut` so movie colours match the figure colour bar — point
+`FIJI_LUT` at it or pass `--lut`. Without it a built-in approximation is used
+and the script says so.
 
-- `tifffile`, `imageio`, `Pillow`
-- Fiji's `Green Fire Blue.lut`, so movie colours match the figure colour bar.
-  Point `FIJI_LUT` at it, or pass `--lut`. Without it a built-in approximation
-  is used and the script says so.
+---
+
+## 3. Input data
+
+### 3.1 The Fiji step, upstream
+
+Two **separate** operations run in Fiji before any Python:
+
+1. **Registration.** SIFT / linear stack alignment with interpolation. This is
+   where the `Aligned_` filename prefix comes from. Do this if there is drift.
+2. **ROI selection and measurement.** The included macro
+   `Calcium_ROI_selection_v4.ijm` walks through drawing the ROIs, measures mean,
+   max and area for every ROI in every frame and every channel, subtracts the
+   background, and exports. **It does no registration.**
+
+### 3.2 ROI names — the contract
+
+The Python side keys off these names, so they must be exact:
+
+| ROI name | Shape | Meaning |
+|---|---|---|
+| `DA_band` | segmented line, thick | **ventral** dorsal-aorta band ("vDA") — the region of interest |
+| `DA_band_dorsal` | segmented line, thick | **dorsal** band ("dDA") — the ratio reference |
+| `BG` | rectangle | background; subtracted from every other ROI |
+| `flat_01`, `flat_02`, … | rectangle | single **elongated** cells |
+| `round_01`, `round_02`, … | rectangle | single **round** cells |
+
+Channels must be named `GCaMP` and `Lifeact`.
+
+### 3.3 The exported CSV
+
+One CSV per movie, named `*_roi_timeseries_allChannels.csv`:
+
+```csv
+image,phase,channel,roi_name,frame,mean,max,area,bg_mean,mean_bgsub,max_bgsub
+```
+
+| Column | Meaning |
+|---|---|
+| `image` | source filename |
+| `phase` | `pre` (before drug) or `post` (after) |
+| `channel` | `GCaMP` or `Lifeact` |
+| `roi_name` | one of the names above |
+| `frame` | 0-based time index |
+| `mean`, `max` | raw intensity |
+| `area` | ROI area in pixels |
+| `bg_mean` | mean of the `BG` ROI in that frame and channel |
+| `mean_bgsub`, `max_bgsub` | background-subtracted |
+
+**Only the background-subtracted columns are used.** A missing column raises a
+descriptive error rather than silently producing wrong numbers.
+
+### 3.4 Condition and genotype come from the FILENAME
+
+Folders are organisational only. The tokens are matched by
+`CONDITION_ALIASES` and `GENOTYPE_ALIASES` in `calcium_config.py`. A movie with
+no genotype token becomes `DEFAULT_GENOTYPE` (`WT`), so experiments without
+genotypes behave exactly as before.
+
+### 3.5 Layout
+
+```
+DATA_BASE/
+  Analysis_<experiment>/           <- one dataset; cfg.ROOT points here
+    <batch>/<condition>/
+        Aligned_..._e1_pre_DMSO_..._roi_timeseries_allChannels.csv
+        Aligned_..._e1_post_DMSO_..._roi_timeseries_allChannels.csv
+        ...
+```
+
+**`discover_csvs` skips any directory whose name starts with `_`.** Every
+output, temp and QC tree is underscore-prefixed for exactly that reason. A new
+working directory that is *not* underscore-prefixed will be ingested as source
+data.
 
 ---
 
 ## 4. Running
 
-### The per-dataset pipeline
+### Per dataset
 
 ```bash
-python calcium_qc.py         # independent QC sentinel - run BEFORE the build
+python calcium_qc.py         # QC sentinel - run BEFORE the build
 python run_all.py            # build tables, then Q1 + Q2 + Q3 plots
 python run_all.py build      # tables only
 python run_all.py plots      # q1 + q2 + q3, assuming tables exist
 python run_all.py q2         # one step: build / q1 / q2 / q3
 ```
 
-`calcium_qc.py` reads the raw Fiji CSVs directly, computes per-ROI quality
-metrics (FAIL / FLAG_HIGH / FLAG_LOW) and writes `_qc/`. It **never modifies
-data** and never changes pipeline behaviour.
-
-To run on a subset without touching your real outputs, point the config at a
-throwaway tree in a script — and do **not** start its name with `_`:
+To run on a subset without touching your real outputs, redirect the config in a
+script — and do **not** start the directory name with `_`:
 
 ```python
 import calcium_config as cfg
@@ -111,172 +185,307 @@ main()
 ### Cross-dataset figures
 
 These read the built `Q2_embryo_summary_cells.csv` from several datasets at
-once. Set `DATASET_ROOTS` and `MAIN_FIG_DIRS` in `paths_local.py` first.
+once; set `DATASET_ROOTS` and `MAIN_FIG_DIRS` in `paths_local.py` first.
 
 ```bash
-python plot_main_foldchange.py       # Yoda1 / GsMTx4, 30 vs 48 hpf   (Fig 5e-h)
-python plot_main_foldchange_iso.py   # ISO / MIC / piezo crispant     (Fig 5i-l)
-python plot_main_q1_ratio.py         # vDA/dDA ratio, 30 vs 48 hpf    (Supp 9b)
+python plot_main_foldchange.py       # Fig 5e-h
+python plot_main_foldchange_iso.py   # Fig 5i-l
+python plot_main_q1_ratio.py         # Supp Fig 9b
 ```
 
 ### Collecting and deriving
 
 ```bash
-python make_subset_figures.py     # rebuild one dataset restricted to a subset
-                                  # of conditions, into a sibling output tree
-python collect_supp_figures.py    # copy intensity + event panels into _SuppFigures/
+python make_subset_figures.py     # one dataset, restricted to some conditions,
+                                  # into a sibling output tree
+python collect_supp_figures.py    # copy panels into _SuppFigures/
 python build_source_data.py       # assemble Source_Data.xlsx
 ```
-
-`make_subset_figures.py` redirects `cfg.out_root()` so tables, figures **and**
-the stats workbook move together — that is what produced the E3-vs-ISO
-two-group run used by the main figure.
 
 ### Supplementary movies
 
 ```bash
 export MOVIE_ROOT="/path/to/RepresentativeMovies/Movies"
-export MOVIE_PY="/path/to/python"           # needs tifffile, imageio, Pillow
+export MOVIE_PY="/path/to/python"
 export FIJI_LUT="/path/to/Green Fire Blue.lut"
 bash build_supp_movies.sh
 ```
 
-`build_supp_movies.sh` records the exact per-panel display ranges used for the
-published movies, so re-running reproduces them. For one movie by hand:
-
-```bash
-python make_condition_movie.py \
-    --in_dir "<folder of cropped TIFFs + ROI sets>" \
-    --order "DMSO,Yoda1,E3,GsMTx4" \
-    --labels "DMSO,Yoda1,E3 buffer,GsMTx4" \
-    --out movie.mp4 --lifeact_per_panel
-```
-
 Each panel needs a cropped 2-channel TIFF (`TCYX`) and an ImageJ ROI set saved
 on that **same cropped** image, containing ROIs named `elongated`, `round` and
-optionally `VDA`. Panels are matched to files by the `--order` labels; `-`
-leaves a cell of the grid blank.
+optionally `VDA`. `build_supp_movies.sh` records the exact per-panel display
+ranges used for the published movies.
 
 ---
 
-## 5. Architecture
+## 5. Methods
 
-Single source of truth → core builder → plot consumers. **Edit parameters only
-in the config.**
-
-| File | Role |
-|---|---|
-| `calcium_config.py` | Every tunable parameter. Output paths and column suffixes are *functions* derived from the analysis window, so changing `W` keeps the whole pipeline in sync. Frequently-edited items are at the top. |
-| `calcium_build_tables.py` | The data core: Fiji CSVs → long table → band traces (vDA/dDA/BG) → Lifeact `M` correction → F/F₀ → event detection → per-cell and per-embryo tables. Writes `Q1_*`, `Q2_*`, `Q3_*` and a `_config_snapshot.py` of the parameters used. |
-| `plot_Q1_vDA_dDA_ratio.py` | vDA/dDA ratio figures |
-| `plot_Q2_cells_events.py` | The largest consumer: trace panels, boxplots, and **all the statistics** |
-| `plot_Q3_vDA_trace.py` | vDA trace figures |
-| `calcium_qc.py` | Independent QC sentinel, reads raw CSVs, never writes into the analysis |
-| `run_all.py` | Orchestrator; runs each step in a subprocess with the active interpreter |
-| `plot_style.py` | Shared matplotlib style |
-| `make_condition_movie.py` | 2×2 condition movies: merge over Green Fire Blue, ROI boxes, scale bar, timestamp |
-| `build_source_data.py` | Source Data workbook, one sheet per figure |
-
-`analyze_piezo_*quick.py` are deliberately throwaway single-experiment scripts.
-They **import** the verified primitives from `calcium_build_tables` rather than
-re-implementing them.
-
-### Two analysis tracks
+### 5.1 Two experimental tracks
 
 - **Track A — pre/post** (the main pipeline). Each recording has a `pre` phase
-  and a `post` phase separated by a remount gap. F/F₀ and event thresholds are
-  referenced to the pre phase.
+  and a `post` phase, separated by a remount gap. All normalisation and all
+  thresholds are referenced to the pre phase.
 - **Track B — single segment** (`analyze_piezo_baseline_quick.py`). One 20-min
   segment, self-referenced threshold. Used for piezo-crispant baseline data.
 
----
+`DT_SECONDS` = 30, so one frame = 0.5 min. The pre phase is 5 min (10 frames);
+the analysis window is `POST_SHOW_MIN` = **20 min** post-drug (40 frames).
 
-## 6. Statistics
+### 5.2 The cell signal
 
-All tests treat **the embryo as the unit of analysis**: cells are rolled up to
-embryo means first. Running tests on individual cells would be
-pseudoreplication.
+`CELL_SIGNAL_STAT = "mean"` — the per-cell signal is `mean_bgsub`, the
+background-subtracted mean over the ROI. `max_bgsub` is retained in every table
+but is not what is analysed: a single bright vesicle or a registration artefact
+moves the max but not the mean.
 
-**Planned comparisons.** `cfg.STATS["planned_pairs"]` is a *superset* of
-`(vehicle, drug)` pairs across all experiments; each run automatically uses only
-the pairs whose both conditions are present, so it never needs editing per
-dataset. For matched pairs the boxplots draw only those Welch-t brackets — raw
-p, no Holm, no omnibus — because the two vehicle-drug pairs have different
-vehicles and are therefore separate families. If none of the pairs are present,
-it falls back to omnibus + all-pairwise Holm with a one-time warning.
+### 5.3 Lifeact M correction (post phase only)
+
+Remounting between the pre and post recordings shifts the absolute intensity.
+The Lifeact channel is structural, so its vDA signal gives the shift:
+
+```
+M = median( Lifeact_vDA, pre ) / median( Lifeact_vDA, post )
+GCaMP_post_corrected(t) = GCaMP_post(t) × M
+```
+
+Applied to the post phase only. Written to `M_vDA_from_Lifeact.csv`, one row
+per embryo, so the factor applied to each recording is auditable.
+
+### 5.4 F/F₀
+
+```
+F0   = median( GCaMP_corrected(t) ,  t over the ENTIRE pre phase )
+F/F0 = GCaMP_corrected(t) / F0
+```
+
+Computed per cell. **F₀ uses the whole pre phase, not the first N post
+frames** — so the pre-phase median of F/F₀ is ≈1 by construction, and no post
+frame can enter its own baseline.
+
+This is a **ratio, not ΔF/F₀**: vehicle baselines sit at 0.72–1.20, away from
+zero, which keeps the fold changes in Figure 5 stable.
+
+### 5.5 Event detection
+
+An event is a **single frame** on the F/F₀ trace satisfying all three:
+
+| | Condition |
+|---|---|
+| **(i) shape** | `x[t-1] < x[t] >= x[t+1]` |
+| **(ii) locality** | `x[t] >= (1 + rel_peak_frac)·max(x[t-1], x[t+1])` **OR** `x[t] >= (1 + prom_frac)·P20(x[t-2 … t+2])` |
+| **(iii) global** | `x[t] >= pre_median + k · σ_robust(pre)` |
+
+with `rel_peak_frac` = `prom_frac` = 0.10, `prom_win` = 2, `k` = 2.0, and
+
+```
+σ_robust = 1.4826 × MAD        (falls back to the standard deviation when MAD = 0)
+```
+
+Candidates within `refractory_frames` (1) of each other are merged, keeping the
+largest.
+
+The **OR** in (ii) is deliberate: the neighbour rule catches sharp single-frame
+spikes, the prominence rule catches broader transients where the adjacent
+frames are also elevated. The threshold in (iii) is **referenced to the pre
+phase**, so a drug that raises the whole trace raises the event count rather
+than moving the threshold with it. Legacy self-referenced columns are still
+written but are not what is plotted.
+
+Event rate is reported as **events per cell per 20 min**.
+
+### 5.6 vDA/dDA ratio
+
+```
+ratio(t) = GCaMP_vDA(t) / GCaMP_dDA(t)
+```
+
+summarised per embryo as the median over frames. A ratio above 1 means the
+ventral wall is brighter — activity polarised to the side where haematopoietic
+cells emerge. Computed for control embryos.
+
+### 5.7 Statistics
+
+**The embryo is the unit of analysis.** Cells are averaged to an embryo value
+before any test. Every dot on every boxplot is one embryo.
+
+**Planned comparisons.** `STATS["planned_pairs"]` is a *superset* of
+`(vehicle, drug)` pairs across all experiments —
+`(E3, GsMTx)`, `(DMSO, Yoda)`, `(E3, ISO)`, `(E3, BDM)`. Each run
+automatically uses only the pairs whose both conditions are present, so it is
+never edited per dataset. For those pairs the boxplots draw only the
+drug-vs-vehicle Welch-t brackets, **raw p, no correction**: DMSO/Yoda1 and
+E3/GsMTx4 have *different vehicles* and are therefore separate families.
+Multiplicity is corrected **within** a family sharing a control, never across.
+
+If none of the planned pairs are present, the code falls back to omnibus
+one-way ANOVA + all-pairwise Holm, with a one-time warning.
 
 **Genotype × drug.** When two genotypes share a `pair_id`, the layout switches
-to genotype × drug with a Type-II two-way ANOVA (main effects, interaction,
-partial η²) and Tukey HSD post-hoc. This is independent of `planned_pairs`.
+to a Type-II two-way ANOVA (main effects, interaction, partial η²) with Tukey
+HSD post-hoc.
 
-**Stats workbook.** To keep figures uncluttered the genotype × drug panel prints
-only a `2-way ANOVA (II)` header. *Every* p-value goes to
-`tables/Q2_stats_pvalues.xlsx`:
+**Fold change** (main figures). Each drug embryo is divided by the **mean of
+its own vehicle**, so vehicles collapse to the baseline. The drug-vs-vehicle
+p-value is the two-group Welch on **raw** values — dividing by the vehicle mean
+discards the control's spread, so a one-sample test against 1 would be
+anti-conservative.
+
+**Event rate is reported as a difference, not a ratio.** Control event rates
+reach zero, and a ratio diverges there.
+
+---
+
+## 6. Outputs
+
+```
+Analysis_<experiment>/
+├── _qc/                                  written by calcium_qc.py
+│   ├── QC_files.csv                      one row per CSV: FAIL / FLAG / OK
+│   ├── QC_cells.csv                      one row per cell ROI
+│   ├── QC_summary.txt
+│   └── QC_plots/
+└── _py_out_20min/                        <- the "20" is POST_SHOW_MIN
+    ├── _config_snapshot.py               the parameters this run used
+    ├── tables/
+    └── plots_png/ , plots_svg/           identical trees, two formats
+```
+
+### `tables/`
+
+| File | One row per | Contents |
+|---|---|---|
+| `band_traces_long_gcamp.csv` | frame × ROI | vDA / dDA / BG GCaMP traces, long format |
+| `band_traces_long_lifeact.csv` | frame × ROI | the same for Lifeact |
+| `M_vDA_from_Lifeact.csv` | embryo | the M correction factor applied |
+| `Q1_ratio_prepost.csv` | frame | vDA/dDA ratio over time |
+| `Q1_ratio_summary_prepost.csv` | embryo × phase | median ratio |
+| `Q1_ratio_post_control.csv` | embryo | control-only post ratio |
+| `Q1_band_events_post_control.csv` | embryo | band-level event counts |
+| `Q2_cells_vDA_prepost.csv` | frame × cell | the F/F₀ traces — the largest table |
+| `Q2_events_cells.csv` | **cell** | events pre and post, rate, mean amplitude, mean peak duration, `pre_threshold` |
+| `Q2_embryo_summary_cells.csv` | **embryo × cell class** | `n_cells`, `mean_events_per_cell_per_20min_post`, `embryo_mean_amplitude_post_20min`, `embryo_mean_peak_duration_post_20min`, `fraction_active_post` — **the dots on every boxplot** |
+| `Q3_vDA_trace_prepost.csv` | frame | vDA band trace per condition |
+| `Q2_stats_pvalues.xlsx` | — | see below |
+
+**`Q2_stats_pvalues.xlsx`** carries every p-value, including the exact value
+where a figure floors it to `p<0.0001`:
 
 | Sheet | Contents |
 |---|---|
-| `twoway_anova` | two-way ANOVA table |
-| `pairwise` | all pairwise comparisons, with the **exact** p even where the figure floors it to `p<0.0001` |
+| `pairwise` | every pairwise comparison: `pair_id`, `cell_class`, `metric`, `test`, `group1`, `group2`, `p_value` |
+| `twoway_anova` | the genotype × drug ANOVA table |
 | `n_cells` | genotype × drug sample sizes: n embryos and n cells, split flat/round |
-| `foldchange` | the fold-change numbers behind the main figures |
+| `foldchange` | the fold-change numbers behind the main figures, with the vehicle mean used |
 
-**Fold change.** Each drug embryo is normalised by the **mean of its own
-vehicle**, so vehicles collapse to the baseline. Drug-vs-vehicle p is the
-two-group Welch on **raw** values — dividing by the vehicle mean discards the
-control's spread, so a one-sample test against 1 would be anti-conservative.
-Fold change is unstable when the vehicle baseline is near zero, which is why
-**event rate is reported as a difference, not a ratio**: control rates reach 0.
+### `plots_svg/` (and the identical `plots_png/`)
+
+```
+Q1_vDA_dDA_ratio/<pair_id>/                    vDA/dDA ratio, per experiment
+Q3_vDA_trace/<pair_id>/                        vDA band traces
+Q2_cells_events/
+    L1_cells/<cell_class>/<pair_id>/<condition>/    one panel per CELL
+    L2_embryo/<cell_class>/<pair_id>/               embryo means
+    L3_overlay_cells/  L3_overlay_embryos/  L3_repeat_pooled/
+                                                    overlays and pooled repeats
+    boxplot_amplitude/<cell_class>/<pair_id>/       Ca2+ intensity (F/F0)
+    boxplot_events/<cell_class>/<pair_id>/          events per cell per 20 min
+    boxplot_duration/<cell_class>/<pair_id>/        mean peak duration
+    boxplot_foldchange/<cell_class>/<pair_id>/      drug / its own vehicle
+```
+
+`<cell_class>` is `flat` or `round`; `<pair_id>` identifies the experiment,
+e.g. `E3_vs_Yoda_vs_GsMTx`.
+
+SVGs carry real text (`svg.fonttype = "none"`), so every label stays editable
+in Illustrator.
+
+**Note on the metric name.** Figures are labelled "Ca²⁺ Intensity", but the
+files and columns keep the original `amplitude` key so tables, figures and the
+stats workbook cross-reference. That is why the intensity panels live under
+`boxplot_amplitude/`.
+
+### Cross-dataset outputs
+
+```
+DATA_BASE/
+├── _MainFigures/
+│   ├── Yoda_GsMTx/            main_foldchange.csv + row figure     (Fig 5e-h)
+│   ├── ISO_MIC_Piezo_.../     main_iso_foldchange.xlsx + figures   (Fig 5i-l)
+│   └── Q1_vDA_dDA_ratio/      main_q1_ratio.csv + figures          (Supp 9b)
+├── _SuppFigures/<dataset>/    collected intensity and event panels
+└── _SourceData/Source_Data.xlsx
+```
 
 ---
 
-## 7. Load-bearing decisions — do not silently undo
+## 7. Parameters and Methods alignment
+
+| Methods statement | Value | Config key |
+|---|---|---|
+| Frame interval | 30 s (1 frame = 0.5 min) | `DT_SECONDS` |
+| Pre phase shown | 5 min | `PRE_SHOW_MIN` |
+| Post analysis window | 20 min | `POST_SHOW_MIN` |
+| Cell signal | background-subtracted mean | `CELL_SIGNAL_STAT = "mean"` |
+| vDA / dDA / background ROI | `DA_band` / `DA_band_dorsal` / `BG` | `ROI_VDA`, `ROI_DDA`, `ROI_BG` |
+| Lifeact correction | median(pre) / median(post), post only | `calcium_build_tables.py` |
+| Baseline F₀ | median over the entire pre phase | `calcium_build_tables.py` |
+| Normalisation | F/F₀ (ratio) | `calcium_build_tables.py` |
+| Event locality gate | 10% over neighbour **or** over the 20th percentile of ±2 frames | `PEAK_DETECTION.rel_peak_frac`, `.prom_frac`, `.prom_win` |
+| Event threshold | pre-median + 2 × robust σ | `PEAK_DETECTION.robust_z_k`, `.use_robust_z` |
+| Robust σ | 1.4826 × MAD | `robust_sigma()` |
+| Refractory period | 1 frame | `PEAK_DETECTION.refractory_frames` |
+| Planned comparisons | drug vs its own vehicle | `STATS["planned_pairs"]` |
+| Multiplicity | Holm **within** a shared-control family | `plot_Q2_cells_events.py` |
+| Genotype × drug | Type-II two-way ANOVA + Tukey HSD | `plot_Q2_cells_events.py` |
+| Unit of analysis | the embryo | throughout |
+
+---
+
+## 8. Load-bearing decisions
 
 Each of these was investigated and chosen deliberately.
 
-- **`mean_bgsub` is the primary cell signal** (`cfg.CELL_SIGNAL_STAT = "mean"`).
-  `max_bgsub` is edge-dirty — single-frame vesicle and registration artefacts —
-  and is kept only as an internal sanity check. Both columns are always written.
-- **F₀ = median of the *entire* pre phase**, not the first N post frames. The
-  F/F₀ pre-median is ≈1 by construction and no post frame enters the baseline.
-- **Event threshold is pre-referenced**: `pre_median + k·σ_robust(pre)` with
-  `k = 2.0` and `σ_robust = 1.4826·MAD` (falling back to std when MAD = 0).
-  Legacy self-referenced columns are still written but are not what is plotted.
-- **Lifeact `M` correction**: `M = median(Lifeact_vDA_pre) / median(post)`,
-  applied to post only as `post × M`. Lifeact-as-bleaching-reference was tried
-  and abandoned for Track A.
+- **`mean_bgsub` is the primary cell signal.** `max_bgsub` is edge-dirty —
+  single-frame vesicle and registration artefacts — and is kept only as an
+  internal sanity check. Both columns are always written.
+- **F₀ = median of the *entire* pre phase**, not the first N post frames.
+- **The event threshold is pre-referenced**, so a drug that raises the whole
+  trace raises the event count instead of moving its own threshold.
+- **Lifeact M is applied to the post phase only.** Lifeact as a
+  frame-by-frame bleaching reference was tried and abandoned for Track A.
 - **`embryo_id = batch__pair__genotype__drug__embryo`** — genotype is in the id
   so two genotypes with the same embryo number never collide. Nothing parses it
   positionally; keep it opaque.
-- **The analysis window `W` stays config-adjustable** (`POST_ANALYSIS_MIN` /
-  `POST_SHOW_MIN`, default 20 min). Do not hardcode it. `DT_SECONDS = 30`, so
-  one frame = 0.5 min.
+- **The analysis window stays config-adjustable.** Output paths and column
+  suffixes are *functions* of it (`out_root()`, `window_suffix()`,
+  `events_col_per_embryo()`), so changing the window keeps the whole pipeline
+  in sync. Do not hardcode it.
+- **Multiple-comparison families are defined by the shared control.** Two
+  vehicle–drug pairs with different vehicles are two families, not one.
 
 ---
 
-## 8. Gotchas
+## 9. Gotchas and tests
 
 - **`print()` with emoji crashes on a Windows cp1252 console.** Each `main()`
   reconfigures stdout to UTF-8 (guarded) at its start — preserve that, and keep
   new console and figure text ASCII-safe where practical.
 - A temp or output directory **must** start with `_`, or `discover_csvs` will
   ingest it as source data.
-- The stats workbook needs `openpyxl`; without it `plot_Q2` silently writes CSVs
-  instead.
+- The stats workbook needs `openpyxl`; without it `plot_Q2` silently writes
+  CSVs instead.
 
----
-
-## 9. Tests
-
-The load-bearing pure functions have regression tests: `holm`, `robust_sigma`,
-`safe_div`, event detection, peak duration, two-way ANOVA + Tukey.
+The load-bearing pure functions have regression tests — `holm`,
+`robust_sigma`, `safe_div`, event detection, peak duration, two-way ANOVA +
+Tukey:
 
 ```bash
 python tests/test_stats.py     # plain runner, no pytest needed
 python -m pytest tests/        # same tests, if pytest is installed
 ```
 
-There is no lint config. Otherwise "testing" a change means running the relevant
-step on real or synthetic data and checking the outputs.
+There is no lint config. Otherwise "testing" a change means running the
+relevant step on real or synthetic data and checking the outputs.
 
 ---
 

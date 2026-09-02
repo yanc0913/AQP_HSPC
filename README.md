@@ -14,6 +14,11 @@ stacks, and are set up separately — pick the one you need.
 Each directory has its own `README.md`, `requirements.txt` and configuration —
 **start there.** This page is only orientation.
 
+Both pipeline READMEs are structured the same way: what goes in, what the
+method actually does (with the definitions and formulae), what lands on disk
+file by file, and a **Parameters and Methods alignment** table mapping every
+number in the paper's Methods section to the configuration key that sets it.
+
 ---
 
 ## What each pipeline actually does
