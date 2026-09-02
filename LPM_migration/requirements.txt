@@ -1,14 +1,25 @@
-# Python 3.9+ recommended.
-# NOTE: StarDist/csbdeep require TensorFlow; install a TF build that matches your
-# platform and (optionally) GPU/CUDA setup before installing this file.
-numpy
-pandas
-scipy
-matplotlib
-PyYAML
-tifffile
-imageio
-scikit-image
-trackpy
-stardist
-csbdeep
+# LPM migration tracking pipeline.
+#
+# Tested on Python 3.11.14 (conda). Python 3.9+ should work.
+#
+# INSTALL TENSORFLOW FIRST. StarDist and csbdeep need it, and the right build
+# depends on your platform and whether you are using a GPU, so it is not pinned
+# here. The published results used tensorflow 2.12.0.
+#
+# The versions below are the ones that produced the published analysis. Loosen
+# them if you need to, but note numpy is held at 1.x: TensorFlow 2.12 and the
+# StarDist stack do not work with numpy 2.
+numpy==1.23.5
+pandas==2.3.3
+scipy==1.15.3
+matplotlib==3.10.7
+PyYAML==6.0.3
+tifffile==2025.10.16
+imageio==2.37.2
+scikit-image==0.24.0
+trackpy==0.7
+stardist==0.9.1
+csbdeep==0.8.1
+
+# Only needed to render the figure PDFs in compare_submitted_vs_new.py:
+# pymupdf

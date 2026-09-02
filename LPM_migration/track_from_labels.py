@@ -8,6 +8,8 @@ import pandas as pd
 import tifffile as tiff
 import matplotlib.pyplot as plt
 from skimage.measure import regionprops_table
+from scipy.ndimage import gaussian_filter1d
+from scipy.signal import find_peaks
 
 import trackpy as tp
 
@@ -389,6 +391,210 @@ def estimate_midline_tls_from_preband(
     return p0, v, float(x_center), "fallback_tls_on_candidates"
 
 
+# -----------------------------
+# Bilateral midline estimator (default)
+# -----------------------------
+# The LPM forms two bilateral bands of nuclei that converge on the midline, so
+# the midline is the GAP BETWEEN the two dense bands. This estimator locates
+# that gap directly: it builds the density from nucleus-sized objects, picks the
+# pair of peaks that behaves like the two bands, and takes their midpoint.
+#
+# Selected with midline_tls.method: "bilateral" (the default). The simpler
+# estimate_x_center_mode() above remains available as "mode_tls".
+#
+# Fits are checked against hand-drawn midline regions with midline_v3_check.py,
+# which writes a per-movie diagnostic figure without touching the results tree.
+_MID_STEP = 1.0     # um, density grid spacing
+_MID_BW = 8.0       # um, density smoothing
+
+
+def _density_1d(u, bw_um=_MID_BW, step=_MID_STEP):
+    """Smoothed 1-D density of u on a regular grid."""
+    u = np.asarray(u, dtype=float)
+    if len(u) < 5:
+        return None, None
+    grid = np.arange(float(u.min()), float(u.max()) + step, step)
+    if len(grid) < 5:
+        return None, None
+    c, _ = np.histogram(u, bins=len(grid), range=(grid[0], grid[-1] + step))
+    return grid, gaussian_filter1d(c.astype(float), bw_um / step)
+
+
+def _two_band_midpoint(u, min_sep_um):
+    """Midpoint of the two bilateral bands in x, or None if there are not two.
+
+    Every PAIR of peaks is scored, rather than simply taking the two tallest: a
+    movie often has three peaks, the two bands plus the cells that have already
+    converged on the midline, and the middle one can be as tall as a band.
+
+    A pair is scored on what the two bilateral bands must satisfy:
+      - both peaks tall and the valley between them deep   -> min(h) - valley
+      - the two bands BRACKET the tissue: little mass left  -> 1 - frac_outside
+        outside the pair
+    The second term is what distinguishes (band, band) from (band, midline
+    cells): the latter leaves a whole band outside the pair.
+    """
+    grid, dens = _density_1d(u)
+    if grid is None:
+        return None
+    pk, _ = find_peaks(dens, distance=max(3, int(min_sep_um / _MID_STEP)))
+    if len(pk) < 2:
+        return None
+    tot = float(dens.sum())
+    if tot <= 0:
+        return None
+
+    best, best_s = None, -np.inf
+    for a in range(len(pk)):
+        for b in range(a + 1, len(pk)):
+            i, j = int(pk[a]), int(pk[b])
+            if (grid[j] - grid[i]) < min_sep_um:
+                continue
+            valley = float(dens[i:j + 1].min())
+            depth = min(dens[i], dens[j]) - valley
+            frac_out = float((dens.sum() - dens[i:j + 1].sum()) / tot)
+            s = depth * (1.0 - frac_out)
+            if s > best_s:
+                best_s, best = s, (i, j)
+    if best is None:
+        return None
+    i, j = best
+    return dict(x=0.5 * (grid[i] + grid[j]), left=float(grid[i]),
+                right=float(grid[j]), hL=float(dens[i]), hR=float(dens[j]), score=float(best_s))
+
+
+def _gap_sharpness(u, x_cut, look_um=150.0):
+    """Tall density on BOTH sides within look_um, low density at the cut.
+
+    This is the angle objective. The cut is pinned to the global two-band
+    anchor, so the sweep can only answer "which tilt" - it can never wander off
+    to a wide empty region, which is how a free-position variant failed during
+    development.
+    """
+    grid, dens = _density_1d(u)
+    if grid is None or dens.max() <= 0:
+        return float("-inf")
+    i = int(np.clip(np.searchsorted(grid, x_cut), 1, len(grid) - 2))
+    w = int(look_um / _MID_STEP)
+    lo, hi = max(0, i - w), min(len(dens), i + w + 1)
+    if i - lo < 5 or hi - i < 5:
+        return float("-inf")
+    return float(min(dens[lo:i].max(), dens[i + 1:hi].max()) - dens[i])
+
+
+def estimate_midline_bilateral(spots, tcfg, mcfg):
+    """Midline as the gap between the two bilateral nuclear bands.
+
+    1. Density from NUCLEUS-SIZED objects only. The all-object profile is
+       dominated by sub-nuclear debris, which is densest exactly in the midline
+       region.
+    2. Position = midpoint of the two dominant bands.
+    3. Tilt from a rotation sweep scored by how sharply the gap separates the
+       bands, then the position is RE-DERIVED in the rotated frame: the anchor
+       was measured on a projection along a different axis, so a tilted line
+       that kept it would inherit an offset belonging to the vertical one.
+    4. Rotation pivot is the centre of the y RANGE, not median(y). The nuclei
+       are skewed down the field; median(y) put the pivot at y~560 of a 60-650
+       field on WT 20250616, so any tilt swung the whole line off the midline
+       even when the angle itself was right.
+
+    Returns None if two bands cannot be found, so the caller leaves the spots
+    untouched rather than guessing.
+    """
+    if spots is None or spots.empty or "area_um2" not in spots.columns:
+        return None
+
+    amin = float(tcfg.get("min_area_um2", 20.0))
+    amax = float(tcfg.get("max_area_um2", 60.0))
+    early_frac = float(mcfg.get("fit_early_frac", 0.33))
+    min_sep = float(mcfg.get("min_band_sep_um", 60.0))
+    # Own key: max_abs_tilt_deg is the legacy path's force-vertical fuse (45 deg)
+    # and means something different there. Do not reuse it.
+    ang_max = float(mcfg.get("tilt_sweep_max_deg", 25.0))
+    ang_step = float(mcfg.get("tilt_sweep_step_deg", 0.5))
+    recentre_lim = float(mcfg.get("max_recenter_um", 60.0))
+    gap_frac = float(mcfg.get("gap_frac", 0.30))
+    allow_tilt = _boolish(mcfg.get("allow_tilt", True))
+
+    T = int(spots["frame"].max()) + 1
+    early = spots[spots["frame"] <= int(np.floor(T * early_frac))]
+    nuc = early[(early["area_um2"] >= amin) & (early["area_um2"] <= amax)]
+    if len(nuc) < int(mcfg.get("min_nuclei", 50)):
+        return None
+
+    x = nuc["x_um"].to_numpy(dtype=float)
+    y = nuc["y_um"].to_numpy(dtype=float)
+    ymid = float(0.5 * (np.percentile(y, 5) + np.percentile(y, 95)))
+    yc = y - ymid
+
+    anchor = _two_band_midpoint(x, min_sep)
+    if anchor is None:
+        return None
+
+    def _place(ang):
+        t = np.radians(ang)
+        u = x * np.cos(t) - yc * np.sin(t)
+        grid, dens = _density_1d(u)
+        if grid is None:
+            return None
+        xc, anch, moved = anchor["x"], anchor, 0.0
+        if abs(ang) > 1e-6:
+            rot = _two_band_midpoint(u, min_sep)
+            if rot is not None and abs(rot["x"] - anchor["x"]) <= recentre_lim:
+                xc, anch, moved = rot["x"], rot, rot["x"] - anchor["x"]
+        thr = gap_frac * max(anch["hL"], anch["hR"])
+        i = int(np.clip(np.searchsorted(grid, xc), 1, len(grid) - 2))
+        if dens[i] >= thr:
+            gap = 0.0
+        else:
+            lo = hi = i
+            while lo > 0 and dens[lo - 1] < thr:
+                lo -= 1
+            while hi < len(dens) - 1 and dens[hi + 1] < thr:
+                hi += 1
+            gap = float(grid[hi] - grid[lo])
+        return {"ang": float(ang), "x_center": float(xc), "gap": gap,
+                "recentre_um": float(moved), "sharp": _gap_sharpness(u, xc)}
+
+    pick = _place(0.0)
+    if pick is None:
+        return None
+    if allow_tilt:
+        # Angle objective: how well separated the two bands are, scored with
+        # the same criterion that chose them. Scoring the density AT the midline
+        # instead is degenerate on the movies where converging cells sit there,
+        # since lowering it favours smearing the projection.
+        def _sep(a):
+            t = np.radians(a)
+            r = _two_band_midpoint(x * np.cos(t) - yc * np.sin(t), min_sep)
+            return r["score"] if r is not None else np.nan
+
+        angs = np.arange(-ang_max, ang_max + 1e-9, ang_step)
+        sep = np.array([_sep(a) for a in angs], dtype=float)
+        if np.isfinite(sep).any():
+            free = _place(float(angs[int(np.nanargmax(sep))]))
+            if free is not None:
+                pick = free
+
+    t = np.radians(pick["ang"])
+    # A gap width of 0 means the midline is populated rather than empty, which
+    # at 13-17 hpf is expected: the LPM is converging. It is reported as
+    # cells_on_midline and never used to reject a fit.
+    return {
+        "p0": np.array([pick["x_center"] / np.cos(t), ymid], dtype=float),
+        "v": np.array([np.sin(t), np.cos(t)], dtype=float),
+        "x_center": float(pick["x_center"]),
+        "fit_mode": "bilateral_band_midpoint_sweep",
+        "tilt_deg": float(pick["ang"]),
+        "gap_width_um": float(pick["gap"]),
+        "recentre_um": float(pick["recentre_um"]),
+        "n_nuclei_used": int(len(nuc)),
+        "band_left_um": float(anchor["left"]),
+        "band_right_um": float(anchor["right"]),
+        "cells_on_midline": bool(pick["gap"] <= 0),
+    }
+
+
 def apply_midline_tls_filter_spots(
     spots: pd.DataFrame,
     cfg: dict,
@@ -425,29 +631,44 @@ def apply_midline_tls_filter_spots(
     # tilt constraint (optional safety)
     max_abs_tilt_deg = float(mcfg.get("max_abs_tilt_deg", 45.0))
 
-    fit = estimate_midline_tls_from_preband(
-        spots,
-        fit_early_frac=fit_early_frac,
-        min_points=min_points,
-        preband_half_width_um=preband_half,
-        x_center_mode_bins=x_mode_bins,
-        y_mid_q0=y_mid_q0,
-        y_mid_q1=y_mid_q1,
-        ybin_fit_bins=ybin_fit_bins,
-        ybin_min_bin_points=ybin_min_bin_points,
-    )
+    method = str(mcfg.get("method", "bilateral")).strip().lower()
+    extra: Dict[str, Any] = {}
 
-    if fit is None:
-        info = {"enabled": True, "reason": "preband_fit_failed"}
-        return spots.copy(), info
+    if method == "bilateral":
+        bl = estimate_midline_bilateral(spots, cfg.get("tracking", {}) or {}, mcfg)
+        if bl is None:
+            return spots.copy(), {"enabled": True, "reason": "bilateral_fit_failed"}
+        p0, v, x_center, fit_mode = bl["p0"], bl["v"], bl["x_center"], bl["fit_mode"]
+        extra = {k: bl[k] for k in ("tilt_deg", "gap_width_um", "recentre_um",
+                                    "n_nuclei_used", "band_left_um",
+                                    "band_right_um", "cells_on_midline")}
+        # The bilateral sweep is already bounded by tilt_sweep_max_deg, so the
+        # force-vertical fuse below can never fire for it. Left in place for
+        # the legacy path, which needs it.
+    else:
+        fit = estimate_midline_tls_from_preband(
+            spots,
+            fit_early_frac=fit_early_frac,
+            min_points=min_points,
+            preband_half_width_um=preband_half,
+            x_center_mode_bins=x_mode_bins,
+            y_mid_q0=y_mid_q0,
+            y_mid_q1=y_mid_q1,
+            ybin_fit_bins=ybin_fit_bins,
+            ybin_min_bin_points=ybin_min_bin_points,
+        )
 
-    p0, v, x_center, fit_mode = fit
+        if fit is None:
+            info = {"enabled": True, "reason": "preband_fit_failed"}
+            return spots.copy(), info
+
+        p0, v, x_center, fit_mode = fit
 
     # constrain extreme tilt (prevents weird diagonal if something goes wrong)
     ang = angle_deg_from_v(v)
     tilt_from_vertical = min(abs(ang - 90.0), abs(ang + 90.0), abs(ang - 270.0))
     forced_vertical = False
-    if tilt_from_vertical > max_abs_tilt_deg:
+    if method != "bilateral" and tilt_from_vertical > max_abs_tilt_deg:
         p0 = np.array([x_center, float(np.nanmedian(spots["y_um"].to_numpy(dtype=float)))], dtype=float)
         v = np.array([0.0, 1.0], dtype=float)
         ang = angle_deg_from_v(v)
@@ -466,7 +687,9 @@ def apply_midline_tls_filter_spots(
 
     info = {
         "enabled": True,
-        "mode": "preband_tls_all_frames",
+        "mode": ("bilateral_all_frames" if method == "bilateral"
+                 else "preband_tls_all_frames"),
+        "method": method,
         "fit_mode": str(fit_mode),
         "band_half_width_um": float(band_half),
         "preband_half_width_um": float(preband_half),
@@ -481,6 +704,7 @@ def apply_midline_tls_filter_spots(
         "n_removed": int(np.sum(remove)),
         "n_remaining": int(len(out)),
     }
+    info.update(extra)
 
     pd.DataFrame([info]).to_csv(out_dir / "midline_tls_spots_filter_info.csv", index=False)
     return out, info

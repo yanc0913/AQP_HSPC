@@ -1,6 +1,11 @@
-# config.example.yaml
-# Copy to config.yaml and edit the two paths under `project`.
+# config_midline_v3.example.yaml
+# Copy to config_midline_v3.yaml and edit the two paths under `project`.
 # The real config is git-ignored, so machine paths are never committed.
+# config_midline_v3.yaml
+# Same as config.yaml but writes to results_midline_v3/, so results/ -
+# which holds the first-submission figures - is left untouched.
+# Segmentation is NOT re-run: run_midline_v3.py points
+# track_from_labels.py at the existing labels under results/.
 project:
   data_root: "/path/to/Analysis/data"
   results_root: "/path/to/Analysis/results"

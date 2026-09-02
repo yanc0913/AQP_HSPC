@@ -57,3 +57,7 @@ MAIN_FIG_DIRS = {
 # Root for assembled supplementary figures (collect_supp_figures.py gathers the
 # per-dataset panels here, mirroring the _MainFigures layout).
 SUPP_FIG_ROOT = DATA_BASE / "_SuppFigures"
+
+# Group-comparison folder of the LPM cell-migration pipeline (a separate
+# repo). build_source_data.py reads Fig 2 from here.
+LPM_GROUP_COMPARE = Path("/path/to/LPM/Analysis/results") / "_group_compare"

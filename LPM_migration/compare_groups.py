@@ -9,23 +9,40 @@ import re
 import matplotlib as mpl
 
 
+# -------- Type sizes --------
+# Edit here. The panels are ~4.6 x 3.2 in, so these are the sizes as they land
+# on the page before any scaling in Illustrator.
+FONT = dict(
+    base=12,      # fallback for anything not named below
+    label=13,     # axis labels
+    tick=12,      # tick labels  <- this is the one that was too small
+    title=10,     # panel title; usually cropped when the figure is assembled
+    legend=11,
+    pval=11,      # the "p = ..." annotation on the boxplots
+)
+
 mpl.rcParams.update({
     # -------- Font (Illustrator friendly) --------
     "font.family": "sans-serif",
     "font.sans-serif": ["Arial"],
     "pdf.fonttype": 42,   # keep TrueType for Illustrator
     "ps.fonttype": 42,
+    "svg.fonttype": "none",   # real <text> in the svg, editable in Illustrator
 
     # -------- Figure aesthetics --------
-    "font.size": 10,
-    "axes.labelsize": 10,
-    "axes.titlesize": 11,
-    "legend.fontsize": 9,
-    "xtick.labelsize": 9,
-    "ytick.labelsize": 9,
+    "font.size": FONT["base"],
+    "axes.labelsize": FONT["label"],
+    "axes.titlesize": FONT["title"],
+    "legend.fontsize": FONT["legend"],
+    "xtick.labelsize": FONT["tick"],
+    "ytick.labelsize": FONT["tick"],
 
-    "axes.linewidth": 0.8,
-    "lines.linewidth": 1.2,
+    "axes.linewidth": 0.9,
+    "lines.linewidth": 1.4,
+    "xtick.major.width": 0.9,
+    "ytick.major.width": 0.9,
+    "xtick.major.size": 4.0,
+    "ytick.major.size": 4.0,
 })
 
 from scipy.stats import ttest_ind
@@ -47,8 +64,17 @@ ALPHA_FILL = 0.22
 ALPHA_MOVIE_LINE = 0.28   # individual movie lines in preburst/time-series (if enabled)
 
 # Taller figure default (Nature-ish)
-FIGSIZE_TALL = (3.2, 4.2)   # inches; adjust if you want slimmer/wider
-FIGSIZE_WIDE = (4.6, 3.2)
+# Time axis: fix the tick step and rotation instead of letting matplotlib
+# choose. With larger tick type it silently dropped to whole-hour ticks,
+# losing the half-hour grid.
+XTICK_STEP_HPF = 0.5
+XTICK_ROT = 45
+
+# Enlarged from (3.2, 4.2) / (4.6, 3.2). At the bigger tick and label type the
+# rotated x labels ate the axes height and the long y label ("Median tracked
+# nuclear area (um2)") ran past the top of the canvas.
+FIGSIZE_TALL = (3.8, 5.0)   # inches; adjust if you want slimmer/wider
+FIGSIZE_WIDE = (5.4, 4.0)
 
 
 # -----------------------------
@@ -433,6 +459,11 @@ def plot_mean_sd(df_wt: pd.DataFrame, df_mut: pd.DataFrame, ylab: str, title: st
     ax.set_ylabel(ylab)
     ax.set_title(title)
     ax.set_xlim(*xlim)
+    if XTICK_STEP_HPF and np.isfinite(xlim[0]) and np.isfinite(xlim[1]):
+        ticks = np.arange(xlim[0], xlim[1] + 1e-9, XTICK_STEP_HPF)
+        ax.set_xticks(ticks)
+        ax.set_xticklabels(["%.1f" % t for t in ticks],
+                           rotation=XTICK_ROT, ha="right")
     ax.legend(frameon=True)
 
     # y padding so it doesn't stick to bottom/top
@@ -537,7 +568,8 @@ def _compute_ylim_with_padding(all_values: list[np.ndarray], pad_frac: float = 0
 
 def _add_sig_bracket(ax, x1, x2, y, h, text):
     ax.plot([x1, x1, x2, x2], [y, y+h, y+h, y], linewidth=1.0, color="black")
-    ax.text((x1 + x2) / 2, y + h, text, ha="center", va="bottom")
+    ax.text((x1 + x2) / 2, y + h, text, ha="center", va="bottom",
+            fontsize=FONT["pval"])
 
 def boxplot_two_groups(df: pd.DataFrame, value_col: str, group_order: list[str],
                        title: str, ylab: str, out_path: Path):

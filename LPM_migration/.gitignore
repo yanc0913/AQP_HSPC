@@ -1,6 +1,3 @@
-# Machine-specific config (real data paths) — copy config.example.yaml -> config.yaml
-config.yaml
-
 # Archived old versions (kept locally, not part of the repo)
 _archive/
 
@@ -8,7 +5,7 @@ _archive/
 __pycache__/
 *.pyc
 
-# Pipeline outputs / data
+# Pipeline outputs / data (written under paths in config.yaml, but ignore if any land locally)
 results/
 data/
 *.tif
@@ -20,3 +17,9 @@ Thumbs.db
 .vscode/
 .idea/
 .ipynb_checkpoints/
+
+# Machine-specific configs: they hold real data paths. Copy the .example.yaml
+# files and edit the two paths under `project` - every analysis parameter lives
+# in the examples, so nothing is lost by not tracking these.
+/config.yaml
+/config_midline_v3.yaml
