@@ -4,8 +4,9 @@ Turns Fiji-exported ROI time-series into analysis tables, QC reports,
 publication figures, supplementary movies and a Source Data workbook.
 
 This code produces the calcium-imaging analysis and figures in Kondrychyn
-*et al.*, *"Cellular hydraulics ensures robust endothelial-to-haematopoietic
-transition"* (Figure 5, Supplementary Figures 9 and 10).
+*et al.*, *"Osmo-hydraulic volume regulation ensures robust
+endothelial-to-haematopoietic transition"* (Figure 5, Supplementary Figures 9
+and 10).
 
 > **Code only.** Raw imaging data and analysis outputs are not in this
 > repository. Copy `paths_local.example.py` → `paths_local.py` (git-ignored)

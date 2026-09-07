@@ -4,8 +4,8 @@ Segmentation → tracking → group comparison for zebrafish **lateral plate
 mesoderm (LPM)** nuclei in timelapse movies, comparing wild type against
 `aqp1a.1-/-` over 13–17 hpf.
 
-This code produces Figure 2c–h of Kondrychyn *et al.*, *"Cellular hydraulics
-ensures robust endothelial-to-haematopoietic transition"*.
+This code produces Figure 2c–h of Kondrychyn *et al.*, *"Osmo-hydraulic
+volume regulation ensures robust endothelial-to-haematopoietic transition"*.
 
 > **Code only.** Raw movies and analysis outputs are not in this repository.
 > Copy `config.example.yaml` → `config.yaml` (git-ignored) and point it at your

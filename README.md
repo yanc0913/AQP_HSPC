@@ -1,7 +1,7 @@
 # AQP_HSPC
 
-Image-analysis code supporting Kondrychyn *et al.*, *"Cellular hydraulics
-ensures robust endothelial-to-haematopoietic transition"*.
+Image-analysis code supporting Kondrychyn *et al.*, *"Osmo-hydraulic volume
+regulation ensures robust endothelial-to-haematopoietic transition"*.
 
 Two independent pipelines. They share no code, have different dependency
 stacks, and are set up separately — pick the one you need.
