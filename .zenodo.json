@@ -1,0 +1,24 @@
+{
+  "title": "AQP_HSPC: image-analysis pipelines for Kondrychyn et al., \"Osmo-hydraulic volume regulation ensures robust endothelial-to-haematopoietic transition\"",
+  "upload_type": "software",
+  "license": "MIT",
+  "creators": [
+    {
+      "name": "Chen, Yan",
+      "affiliation": "RIKEN Center for Biosystems Dynamics Research, Kobe, Japan"
+    }
+  ],
+  "description": "Two independent Python pipelines. calcium_imaging/ turns Fiji-exported GCaMP ROI time-series into analysis tables, QC reports, statistics and the figures for Figure 5 and Supplementary Figures 9 and 10, plus the Source Data workbook. LPM_migration/ performs StarDist segmentation and trackpy-based nuclear tracking of lateral plate mesoderm cells for Figure 2c-h. Code only; raw imaging data are not included.",
+  "keywords": [
+    "zebrafish",
+    "calcium imaging",
+    "GCaMP",
+    "cell tracking",
+    "StarDist",
+    "endothelial-to-haematopoietic transition",
+    "aquaporin",
+    "cell volume regulation",
+    "image analysis"
+  ],
+  "access_right": "open"
+}
