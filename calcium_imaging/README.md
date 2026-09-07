@@ -188,7 +188,15 @@ main()
 These read the built `Q2_embryo_summary_cells.csv` from several datasets at
 once; set `DATASET_ROOTS` and `MAIN_FIG_DIRS` in `paths_local.py` first.
 
+**Order matters here.** `make_subset_figures.py` builds the E3-vs-ISO-only tree
+`_py_out_<W>min_E3_ISO`, and both `plot_main_foldchange_iso.py` and
+`build_source_data.py` read it — the main ISO figure contrasts only those two
+groups, so its p-values come from a two-group run while the three-group
+E3/ISO/BDM version stays intact for the supplementary figure. Run the subset
+step first or those two scripts fail on a missing tree.
+
 ```bash
+python make_subset_figures.py        # E3-vs-ISO-only tree; must come first
 python plot_main_foldchange.py       # Fig 5e-h
 python plot_main_foldchange_iso.py   # Fig 5i-l
 python plot_main_q1_ratio.py         # Supp Fig 9b
@@ -197,8 +205,6 @@ python plot_main_q1_ratio.py         # Supp Fig 9b
 ### Collecting and deriving
 
 ```bash
-python make_subset_figures.py     # one dataset, restricted to some conditions,
-                                  # into a sibling output tree
 python collect_supp_figures.py    # copy panels into _SuppFigures/
 python build_source_data.py       # assemble Source_Data.xlsx
 ```

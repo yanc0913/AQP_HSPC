@@ -11,10 +11,6 @@ stacks, and are set up separately — pick the one you need.
 | [`calcium_imaging/`](calcium_imaging/) | Zebrafish GCaMP calcium imaging | Figure 5, Supplementary Figures 9 and 10, the supplementary movies, and the Source Data workbook |
 | [`LPM_migration/`](LPM_migration/) | LPM nuclear migration tracking | Figure 2c–h |
 
-[`codeocean/`](codeocean/) holds the scaffolding to run either pipeline as an
-executable Code Ocean capsule — an entry script, an environment build step and
-`/data`-to-`/results` paths. It changes nothing in the pipelines themselves.
-
 Each directory has its own `README.md`, `requirements.txt` and configuration —
 **start there.** This page is only orientation.
 
