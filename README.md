@@ -1,5 +1,8 @@
 # AQP_HSPC
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.22639006.svg)](https://doi.org/10.5281/zenodo.22639006)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 Image-analysis code supporting Kondrychyn *et al.*, *"Osmo-hydraulic volume
 regulation ensures robust endothelial-to-haematopoietic transition"*.
 
@@ -120,6 +123,25 @@ the short version:
 - Multiple-comparison families are defined by the **shared control**: two
   vehicle–drug pairs with different vehicles are two families, not one, and are
   not cross-corrected.
+
+---
+
+## Citing this code
+
+The badge above resolves to the **latest** archived version. The version cited
+in the paper is **v1.0.0**:
+
+> Chen, Y. *AQP_HSPC: image-analysis pipelines for Kondrychyn et al.,
+> "Osmo-hydraulic volume regulation ensures robust
+> endothelial-to-haematopoietic transition"* (v1.0.0). Zenodo (2026).
+> https://doi.org/10.5281/zenodo.22639007
+
+| | DOI |
+|---|---|
+| All versions (always the newest) | [10.5281/zenodo.22639006](https://doi.org/10.5281/zenodo.22639006) |
+| v1.0.0 — the version in the paper | [10.5281/zenodo.22639007](https://doi.org/10.5281/zenodo.22639007) |
+
+Please also cite the paper itself.
 
 ---
 
