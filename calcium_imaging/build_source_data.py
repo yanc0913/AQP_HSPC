@@ -17,6 +17,11 @@ Each sheet carries, for the panels it covers:
   - the per-cell values underneath, since the roll-up is otherwise invisible
   - the statistics: test, n, exact p
 
+Only quantities a panel actually reports are included. The pipeline computes
+more than the paper shows - peak duration, a 30 min event window, per-embryo
+means of the time-course panels, GsMTx4-vs-Yoda1 and between-genotype
+comparisons - and none of that is carried here.
+
 E3 vs ISO appears with TWO different p-values by design - Welch t in the main
 figure, which analyses only that pair, and one-way ANOVA with Holm in the
 supplementary figure, which analyses E3/ISO/BDM as a family of three. Both are
@@ -102,6 +107,27 @@ def pairwise(dskey, subtree="_py_out_%smin" % WSUF):
                          / "Q2_stats_pvalues.xlsx", sheet_name="pairwise")
 
 
+# Columns that survive into the workbook. The pipeline computes more than the
+# paper plots - peak duration, the 30 min event window, the active/inactive
+# flag - and Source Data should carry only what a figure actually shows.
+CELL_COLS = ["dataset", "batch_id", "pair_id", "condition", "genotype",
+             "embryo_id", "roi_name", "cell_class", "n_events_post20min",
+             "events_per_cell_per_20min_post", "mean_amplitude_post_20min",
+             "pre_threshold"]
+
+
+def plotted_only(st, metric_col="metric"):
+    """Drop statistics for quantities no panel reports.
+
+    duration            no figure plots peak duration
+    foldchange_G_vs_Y   GsMTx4-vs-Yoda1 on the folds; Fig 5e-h draws only the
+                        drug-vs-its-own-vehicle p above each box
+    """
+    st = st[st[metric_col].astype(str) != "duration"]
+    st = st[~st.test.astype(str).str.startswith("foldchange")]
+    return st.reset_index(drop=True)
+
+
 def welch(a, b):
     a, b = np.asarray(a, float), np.asarray(b, float)
     a, b = a[np.isfinite(a)], b[np.isfinite(b)]
@@ -153,27 +179,14 @@ def sheet_fig2(writer):
            "between the two bilateral nuclear bands. See the Methods.")
 
     box = mv[["group", "embryo", "n_frames", "n_tracks", "n_burst_events",
-              "mean_median_speed_um_per_min", "burst_per_track_ratio",
-              "mean_tracked_nuclei", "mean_fragments_per_frame"]].copy()
+              "mean_median_speed_um_per_min", "burst_per_track_ratio"]].copy()
     s.heading("Fig 2d and 2g  |  one value per embryo (the dots)")
     s.note("2d = mean_median_speed_um_per_min; 2g = burst_per_track_ratio "
-           "(nuclear fragmentation events per track).")
+           "(nuclear fragmentation events per track). n_tracks and "
+           "n_burst_events are the two terms of that ratio.")
     s.table(box)
 
     rows = []
-    for panel, col, unit in (("2c", "median_speed_um_per_min", "um/min"),
-                             ("2e", "median_area_um2", "um^2"),
-                             ("2f", "n_bursts", "count"),
-                             ("2h", "n_tracked", "count")):
-        e = (ts.dropna(subset=[col]).groupby(["group", "movie"])[col]
-             .mean().reset_index())
-        a = e.loc[e.group == "WT", col]
-        b = e.loc[e.group == "MUT", col]
-        rows.append(dict(panel=panel, quantity=col, unit=unit,
-                         n_WT=len(a), n_MUT=len(b),
-                         mean_WT=a.mean(), mean_MUT=b.mean(),
-                         test="Welch two-sided t-test on per-embryo means",
-                         p_value=welch(a, b)))
     for panel, col in (("2d", "mean_median_speed_um_per_min"),
                        ("2g", "burst_per_track_ratio")):
         a = mv.loc[mv.group == "WT", col]
@@ -184,9 +197,9 @@ def sheet_fig2(writer):
                          test="Welch two-sided t-test", p_value=welch(a, b)))
     st = pd.DataFrame(rows).sort_values("panel")
     s.heading("Statistics")
-    s.note("Panels 2c, 2e, 2f and 2h are plotted as mean +- SD across embryos "
-           "and carry no test on the figure; the p-values below are for the "
-           "whole 13-17 hpf window and are given for completeness.")
+    s.note("2d and 2g are the two panels that report a p-value. Panels 2c, "
+           "2e, 2f and 2h are time courses plotted as mean +- SD across "
+           "embryos and carry no test.")
     s.table(st)
 
     n_at = (ts.dropna(subset=["median_area_um2"])
@@ -257,7 +270,8 @@ def sheet_yoda(writer):
         p.insert(0, "dataset", ds)
         st.append(p)
     st = pd.concat(st, ignore_index=True)
-    st = st.rename(columns={"metric": "quantity", "test": "test_and_correction"})
+    st = plotted_only(st).rename(columns={"metric": "quantity",
+                                          "test": "test_and_correction"})
     s.heading("Statistics")
     s.note("Planned drug-vs-vehicle comparisons only. DMSO/Yoda1 and E3/GsMTx4 "
            "have different vehicles, so each is its own family and no "
@@ -273,8 +287,9 @@ def sheet_yoda(writer):
         cl.append(d)
     s.heading("Per-cell values underlying the per-embryo means")
     s.note("One row per cell. Not plotted; included so the roll-up to embryo "
-           "means can be checked.")
-    s.table(pd.concat(cl, ignore_index=True))
+           "means can be checked. pre_threshold is the event threshold for "
+           "that cell, so the event counts can be re-derived.")
+    s.table(pd.concat(cl, ignore_index=True)[CELL_COLS])
     s.finish()
 
 
@@ -283,7 +298,6 @@ def sheet_iso(writer):
     s = Sheet(writer, "Fig 5i-l + Supp Fig 10")
     x = pd.ExcelFile(MAIN_FIG_DIRS["ISO_MIC_Piezo_MAIN"] / "main_iso_foldchange.xlsx")
     per = x.parse("per_group")
-    btw = x.parse("between_group")
     vm = {(r.dataset, r.genotype, r.cell_class, r.metric, r.vehicle): r.vehicle_mean
           for r in per.itertuples()}
 
@@ -318,6 +332,8 @@ def sheet_iso(writer):
                 row[col] = np.log2(v / base) if v > 0 and base > 0 else np.nan
             else:
                 row[col] = v - base
+            if r["condition"] == "BDM":
+                row[col] = np.nan
         rows.append(row)
     e = pd.DataFrame(rows)
 
@@ -327,7 +343,9 @@ def sheet_iso(writer):
            "MIC vs piezo crispant each with E3 and ISO (Supp Fig 10h-o). "
            "Fig 5i-l shows the ISO effect from both, side by side.")
     s.note("Every embryo is normalised to the mean of ITS OWN genotype's E3 "
-           "group, so the MIC and piezo bars each carry their own baseline.")
+           "group, so the MIC and piezo bars each carry their own baseline. "
+           "BDM has no normalised bar in any panel - Supp Fig 10d-g plots its "
+           "raw values - so the two derived columns are left empty for it.")
 
     cols = ["dataset", "cell_class", "genotype", "condition", "embryo_id",
             "n_cells", AMP, EVT, "log2_fold_change_vs_E3", "difference_vs_E3"]
@@ -347,7 +365,7 @@ def sheet_iso(writer):
     three.insert(0, "reported_in", "Supp Fig 10d-g")
     three.insert(1, "analysis", "E3 / ISO / BDM (three groups)")
 
-    both = pd.concat([sub, three], ignore_index=True)
+    both = plotted_only(pd.concat([sub, three], ignore_index=True))
     s.heading("Statistics - E3 vs ISO in wild type is reported TWICE, on "
               "purpose")
     s.note("The main figure asks only whether ISO differs from E3, so that "
@@ -362,17 +380,24 @@ def sheet_iso(writer):
            "differ - the underlying embryos are identical.")
     s.table(both)
 
-    pz = pairwise("Piezo")
-    pz = pz[~pz.test.astype(str).str.startswith("foldchange")].copy()
-    pz.insert(0, "reported_in", "Supp Fig 10l-o, and Fig 5i-l MIC and piezo bars")
-    s.heading("Statistics - MIC vs piezo crispant, E3 vs ISO")
-    s.note("Type-II two-way ANOVA (genotype x drug) with Tukey HSD post-hoc.")
-    s.table(pz)
+    aov = pd.read_excel(DATASET_ROOTS["Piezo"] / ("_py_out_%smin" % WSUF)
+                        / "tables" / "Q2_stats_pvalues.xlsx",
+                        sheet_name="twoway_anova")
+    aov = aov[aov.metric.astype(str) != "duration"].reset_index(drop=True)
+    aov.insert(0, "reported_in", "Supp Fig 10l-o, and Fig 5i-l MIC and piezo bars")
+    s.heading("Statistics - MIC vs piezo crispant, E3 vs ISO: two-way ANOVA")
+    s.note("Type-II two-way ANOVA on per-embryo values. geno = genotype (MIC "
+           "vs piezo crispant), drug = treatment (E3 vs ISO), gxd = their "
+           "interaction; eta2p is partial eta squared.")
+    s.table(aov)
 
-    s.heading("Statistics - comparisons BETWEEN the three groups of Fig 5i-l")
-    s.note("Welch t-tests on the normalised values; this is the interaction "
-           "read-out, i.e. whether the ISO response depends on genotype.")
-    s.table(btw)
+    pz = plotted_only(pairwise("Piezo"))
+    pz.insert(0, "reported_in", "Supp Fig 10l-o, and Fig 5i-l MIC and piezo bars")
+    s.heading("Statistics - MIC vs piezo crispant, E3 vs ISO: Tukey HSD")
+    s.note("Post-hoc for the ANOVA above. The MIC|E3 vs MIC|ISO and Piezo|E3 "
+           "vs Piezo|ISO rows are the p-values printed on the MIC and piezo "
+           "bars of Fig 5i-l.")
+    s.table(pz)
 
     cl = []
     for ds, tag in (("ISO", "48hpf E3/ISO/BDM"),
@@ -381,7 +406,9 @@ def sheet_iso(writer):
         d.insert(0, "dataset", tag)
         cl.append(d)
     s.heading("Per-cell values underlying the per-embryo means")
-    s.table(pd.concat(cl, ignore_index=True))
+    s.note("One row per cell. Not plotted; included so the roll-up to embryo "
+           "means can be checked.")
+    s.table(pd.concat(cl, ignore_index=True)[CELL_COLS])
     s.finish()
 
 
@@ -395,22 +422,23 @@ def sheet_q1(writer):
     s.note("A ratio above 1 means the ventral wall is brighter, i.e. Ca2+ "
            "activity is polarised to the side where haematopoietic cells "
            "emerge.")
-    post = q[q.phase == "post"]
-    s.table(post[["stage", "dataset", "batch_id", "embryo_id", "condition",
-                  "genotype", "n_frames", "ratio_median"]]
+    s.note("The panel uses the PRE-drug recording, before any compound is "
+           "added, so the ratio is a property of the untreated embryo. The "
+           "pipeline also writes a post-drug version of the same ratio; that "
+           "is not this panel and is not included here.")
+    pre = q[q.phase == "pre"]
+    s.table(pre[["stage", "dataset", "batch_id", "embryo_id", "condition",
+                 "genotype", "n_frames", "ratio_median"]]
             .sort_values(["stage", "embryo_id"]))
-    a = post.loc[post.stage == "30hpf", "ratio_median"]
-    b = post.loc[post.stage == "48hpf", "ratio_median"]
+    a = pre.loc[pre.stage == "30hpf", "ratio_median"]
+    b = pre.loc[pre.stage == "48hpf", "ratio_median"]
     s.heading("Statistics")
     s.table(pd.DataFrame([dict(comparison="30 hpf vs 48 hpf",
                                n_30hpf=len(a), n_48hpf=len(b),
+                               median_30hpf=a.median(), median_48hpf=b.median(),
                                mean_30hpf=a.mean(), mean_48hpf=b.mean(),
                                test="Welch two-sided t-test",
                                p_value=welch(a, b))]))
-    s.heading("Pre-drug phase, same embryos (not plotted)")
-    pre = q[q.phase == "pre"]
-    s.table(pre[["stage", "embryo_id", "condition", "n_frames", "ratio_median"]]
-            .sort_values(["stage", "embryo_id"]))
     s.finish()
 
 
