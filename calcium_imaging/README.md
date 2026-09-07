@@ -63,6 +63,7 @@ plot_main_*  /  collect_supp_figures  /  build_source_data  /  make_condition_mo
 | `build_source_data.py` | Source Data workbook, one sheet per figure |
 | `make_condition_movie.py` | 2×2 condition movies |
 | `plot_style.py` | Shared matplotlib style |
+| `qc/qc_max_vs_mean.py` | Standalone check behind the choice of `mean_bgsub` over `max_bgsub` as the cell signal (§5.2) |
 
 ---
 
