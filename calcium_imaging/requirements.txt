@@ -7,3 +7,15 @@ scipy==1.15.3
 matplotlib==3.10.7
 statsmodels==0.14.6
 openpyxl==3.1.5
+
+# Optional -- only for make_condition_movie.py / build_supp_movies.sh, which
+# build the supplementary condition movies. The figure and table pipeline does
+# not need them, so install these only if you want the movies. The versions
+# below are the ones that produced the published movies.
+tifffile==2025.10.16
+imageio==2.37.2
+pillow==12.0.0
+
+# Optional -- tqdm only adds progress bars; calcium_build_tables.py falls back
+# to a plain loop when it is absent. pytest only lets you run the tests as
+# `python -m pytest`; `python tests/test_stats.py` needs neither.
