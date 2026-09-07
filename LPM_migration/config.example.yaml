@@ -34,17 +34,17 @@ roi:
 midline_tls:
   enable: true
   band_half_width_um: 20.0        # +-20 um removes 10.4% of nucleus-sized
-                                  # objects; the old estimator removed 22.1%
-                                  # from the wrong place. Deliberate: the
-                                  # midline is populated by converging LPM
-                                  # cells, so a wider band eats the very
-                                  # population the experiment measures.
+                                  # objects. Deliberate: the midline is
+                                  # populated by converging LPM cells, so a
+                                  # wider band eats the very population the
+                                  # experiment measures.
 
   # "bilateral" (default): midline = the GAP between the two bilateral nuclear
   #   bands, measured from nucleus-sized objects only, tilt from a rotation
-  #   sweep. See _midline_v3_check/READ_ME.txt.
-  # "mode_tls" (legacy): x-histogram MODE of ALL objects + y-binned TLS. That
-  #   lands ON a band and flips side between movies; kept only for provenance.
+  #   sweep. Inspect a fit with midline_v3_check.py.
+  # "mode_tls": a simpler estimator that takes the densest x column of all
+  #   objects, then a y-binned TLS fit. Available as an option; the bilateral
+  #   method is the one to use for a bilateral tissue. See README section 5.4.
   method: "bilateral"
 
   # --- bilateral estimator
