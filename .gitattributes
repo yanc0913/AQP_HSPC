@@ -1,0 +1,15 @@
+# Shell scripts and the capsule entry points MUST keep LF endings. A CRLF
+# shebang line fails on Linux with "bad interpreter: /usr/bin/env bash^M",
+# which is exactly where these run.
+*.sh        text eol=lf
+postInstall text eol=lf
+
+# Everything else that is text: normalise to LF in the repository. Git still
+# checks it out with native endings where a platform wants them.
+*.py        text eol=lf
+*.yaml      text eol=lf
+*.yml       text eol=lf
+*.md        text eol=lf
+*.txt       text eol=lf
+*.ijm       text eol=lf
+*.csv       text eol=lf

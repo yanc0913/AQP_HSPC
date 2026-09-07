@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# Code Ocean environment build step -- calcium imaging capsule.
+#
+# Base image: Python 3.10 (any 3.10+ works; 3.10.19 produced the published
+# results). Nothing here needs a GPU.
+set -euo pipefail
+
+pip install --no-cache-dir -r /code/calcium_imaging/requirements.txt
