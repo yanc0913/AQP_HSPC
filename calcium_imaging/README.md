@@ -51,6 +51,7 @@ plot_main_*  /  collect_supp_figures  /  build_source_data  /  make_condition_mo
 |---|---|
 | `calcium_config.py` | **Every** tunable parameter. Nothing else should be edited to change the analysis. |
 | `calcium_qc.py` | Independent QC sentinel; reads raw CSVs, never writes into the analysis |
+| `qc_peaks.py` | QC on the built tables: contact sheet per condition showing how every event was selected (§5.5) |
 | `calcium_build_tables.py` | The data core: CSVs → all analysis tables |
 | `plot_Q1_vDA_dDA_ratio.py` | vDA/dDA ratio figures |
 | `plot_Q2_cells_events.py` | Single-cell traces, boxplots, **and all the statistics** |
@@ -209,6 +210,27 @@ python plot_main_q1_ratio.py         # Supp Fig 9b
 python collect_supp_figures.py    # copy panels into _SuppFigures/
 python build_source_data.py       # assemble Source_Data.xlsx
 ```
+
+### Checking the event detection
+
+`calcium_qc.py` is a sentinel on the raw CSVs and runs *before* the build.
+`qc_peaks.py` reads the built tables, so it runs *after* it:
+
+```bash
+python qc_peaks.py                # -> _qc/peaks/
+```
+
+One contact sheet per condition, one panel per cell, carrying everything the
+detector used: the trace, the threshold drawn as its construction (pre median
+± k·σ, upper edge = the threshold), the local bar of gate (ii), an arrow on
+every detected event and an open circle on every candidate that was rejected.
+Events come from `detect_events_single_frame` itself and each count is asserted
+against `Q2_events_cells.csv`, so a sheet cannot disagree with the tables.
+
+`peak_qc_summary.csv` adds one row per cell. Two columns are worth watching:
+`never_possible` marks cells whose whole analysis window sits *below* their own
+threshold — their zero is a floor, not a measurement — and `always_above` marks
+cells where the threshold does nothing and the local bar alone selects.
 
 ### Supplementary movies
 
